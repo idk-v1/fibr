@@ -87,11 +87,16 @@ static void printFileArray(FileArray fileArray, int highlight, int start, int en
 		if (file.isFile)
 		{
 			if (file.isArchive)
+			{
 				fputs("\x1B[96m", stdout); // set fg color to cyan
+				fputs("v ", stdout);
+			}
 			else
+			{
 				fputs("\x1B[97m", stdout); // set fg color to white
+				fputs("| ", stdout);
+			}
 
-			fputs("| ", stdout);
 			if (lstrlenW(file.name) > maxNameLen)
 				wprintf(L"%-*.*s...| ", maxNameLen - 3, maxNameLen - 3, file.name);
 			else
