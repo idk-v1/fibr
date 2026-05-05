@@ -171,6 +171,37 @@ wchar_t* dirStackPop(DirStack* stack)
 	return NULL;
 }
 
+void dirStackInit(DirStack* stack, const wchar_t* path)
+{
+	stack->data = NULL;
+	stack->size = 0;
+
+	size_t len = lstrlenW(path);
+	wchar_t* dupPath = malloc(sizeof(wchar_t) * (len + 2));
+	if (dupPath)
+	{
+		memcpy(dupPath, path, sizeof(wchar_t) * len);
+		dupPath[len] = L'\\';
+		dupPath[len + 1] = 0;
+
+		size_t start = 4;
+		for (size_t i = 4; i <= len; ++i)
+		{
+			if (dupPath[i] == L'\\')
+			{
+				dupPath[i] = 0;
+				dirStackPush(stack, dupPath + start);
+				dupPath[i] = L'\\';
+
+				start = i + 1;
+			}
+		}
+
+		free(dupPath);
+	}
+}
+
+
 int main()
 {
 	// read last size from file
@@ -184,6 +215,7 @@ int main()
 	initCurrentDir(&currentDir);
 
 	DirStack dirStack = { 0 };
+	dirStackInit(&dirStack, currentDir);
 
 	FileArray fileArray = { 0 };
 	int highlight = 0;
@@ -333,14 +365,24 @@ int main()
 			if (fileArray.count && !fileArray.files[fileArray.count - 1 - highlight].isFile)
 			{
 				dirChanged = true;
-				currentDir = moveDirDown(currentDir, fileArray.files[fileArray.count - 1 - highlight].name);
+				bool error = false;
+				currentDir = moveDirDown(currentDir, fileArray.files[fileArray.count - 1 - highlight].name, &error);
 				dirStackPush(&dirStack, fileArray.files[fileArray.count - 1 - highlight].name);
 			}
 		}
 		if (keyleft && !leftLast)
 		{
 			dirChanged = true;
-			currentDir = moveDirUp(currentDir);
+
+			bool error = false;
+			currentDir = moveDirUp(currentDir, &error);
+			if (error)
+			{
+				// remove later
+				dirChanged = false;
+
+				// go to disk view
+			}
 
 			retDir = dirStackPop(&dirStack);
 		}

@@ -434,8 +434,9 @@ void sortFileArray(FileArray fileArray, int option)
 		qsort(fileArray.files, fileArray.count, sizeof(File), cmpFnc);
 }
 
-wchar_t* moveDirUp(wchar_t* dir)
+wchar_t* moveDirUp(wchar_t* dir, bool* error)
 {
+	*error = false;
 	if (!dir)
 		return NULL;
 	size_t len = lstrlenW(dir);
@@ -451,18 +452,23 @@ wchar_t* moveDirUp(wchar_t* dir)
 
 	if (pos + 1 == len)
 	{
+		*error = true;
 		return dir;
 	}
 	dir[pos] = 0;
 	return dir;
 }
 
-wchar_t* moveDirDown(wchar_t* dir, const wchar_t* subdir)
+wchar_t* moveDirDown(wchar_t* dir, const wchar_t* subdir, bool* error)
 {
+	*error = false;
 	if (!dir)
 		return NULL;
 	if (!subdir)
+	{
+		*error = true;
 		return dir;
+	}
 
 	wchar_t* newDir = strSubdir(dir, subdir);
 	free(dir);

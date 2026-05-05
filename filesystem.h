@@ -56,5 +56,5 @@ enum
 
 void sortFileArray(FileArray fileArray, int option);
 
-wchar_t* moveDirUp(wchar_t* dir);
-wchar_t* moveDirDown(wchar_t* dir, const wchar_t* subdir);
+wchar_t* moveDirUp(wchar_t* dir, bool* error);
+wchar_t* moveDirDown(wchar_t* dir, const wchar_t* subdir, bool* error);
