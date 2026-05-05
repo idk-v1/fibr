@@ -15,16 +15,16 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="filesystem.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
+    <ClCompile Include="src\fibr.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="src\filesystem.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="fibr.c">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="filesystem.c">
-      <Filter>Source Files</Filter>
-    </ClCompile>
+    <ClInclude Include="src\filesystem.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>

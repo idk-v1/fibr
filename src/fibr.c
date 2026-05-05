@@ -52,6 +52,26 @@ static void enableVT()
 	SetConsoleMode(hConsole, mode | ENABLE_VIRTUAL_TERMINAL_INPUT);
 	
 	fputs("\x1B[? 1 0 4 9 h", stdout); // new screen buffer
+
+	fputs("\x1B]0;FiBr File Browser 0.1.1\x07", stdout);
+}
+
+static void resetTerminal()
+{
+	fputs("\x1B[!p", stdout); // reset
+	fputs("\x1B[? 1 0 4 9 l", stdout); // main screen buffer
+
+	HANDLE hConsole = GetStdHandle(STD_OUTPUT_HANDLE);
+	DWORD mode = 0;
+	GetConsoleMode(hConsole, &mode);
+	SetConsoleMode(hConsole, mode & ~ENABLE_VIRTUAL_TERMINAL_PROCESSING);
+
+	hConsole = GetStdHandle(STD_INPUT_HANDLE);
+	mode = 0;
+	GetConsoleMode(hConsole, &mode);
+	SetConsoleMode(hConsole, mode & ~ENABLE_VIRTUAL_TERMINAL_INPUT);
+	
+	FlushConsoleInputBuffer(hConsole);
 }
 
 static void printFileArray(FileArray fileArray, int highlight, int start, int end, int maxNameLen)
@@ -459,7 +479,7 @@ int main()
 		free(currentDir);
 	freeFileArray(&fileArray);
 
-	fputs("\x1B[!p", stdout); // reset
-	fputs("\x1B[? 1 0 4 9 l", stdout); // main screen buffer
+	resetTerminal();
+
 	return 0;
 }
