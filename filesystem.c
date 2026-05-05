@@ -2,7 +2,7 @@
 
 #include <Windows.h>
 
-Date dateFromFiletime(FILETIME ft)
+static Date dateFromFiletime(FILETIME ft)
 {
 	Date date = { 0 };
 
@@ -59,7 +59,7 @@ FileArray getFilesInDir(const wchar_t* path, bool subdirCount)
 	}
 
 	
-	WIN32_FIND_DATAW findData;
+	WIN32_FIND_DATAW findData = { 0 };
 	HANDLE hFind = FindFirstFileExW(wildPath, FindExInfoBasic, &findData, 
 		FindExSearchNameMatch, NULL, FIND_FIRST_EX_LARGE_FETCH);
 	if (hFind == INVALID_HANDLE_VALUE)
@@ -95,7 +95,7 @@ FileArray getFilesInDir(const wchar_t* path, bool subdirCount)
 			else break; // be happy with what we've got
 		}
 
-		File file;
+		File file = { 0 };
 		file.isFile = (findData.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) == 0;
 
 		size_t nameLen = lstrlenW(findData.cFileName);
@@ -113,9 +113,7 @@ FileArray getFilesInDir(const wchar_t* path, bool subdirCount)
 
 		if (file.isFile)
 		{
-			LARGE_INTEGER fileSize;
-			fileSize.HighPart = findData.nFileSizeHigh;
-			fileSize.LowPart = findData.nFileSizeLow;
+			LARGE_INTEGER fileSize = { .HighPart = findData.nFileSizeHigh, .LowPart = findData.nFileSizeLow };
 			file.size = fileSize.QuadPart;
 		}
 		else if (subdirCount)
@@ -173,7 +171,7 @@ size_t getFileCountInDir(const wchar_t* path)
 	}
 
 
-	WIN32_FIND_DATAW findData;
+	WIN32_FIND_DATAW findData = { 0 };
 	HANDLE hFind = FindFirstFileExW(wildPath, FindExInfoBasic, &findData,
 		FindExSearchNameMatch, NULL, FIND_FIRST_EX_LARGE_FETCH);
 	if (hFind == INVALID_HANDLE_VALUE)
@@ -222,8 +220,7 @@ void freeFileArray(FileArray* fileArray)
 		if (fileArray->files)
 		{
 			for (size_t i = 0; i < fileArray->count; ++i)
-				if (fileArray->files[i].name)
-					free(fileArray->files[i].name);
+				free(fileArray->files[i].name);
 			free(fileArray->files);
 			fileArray->files = NULL;
 		}
@@ -232,17 +229,17 @@ void freeFileArray(FileArray* fileArray)
 }
 
 
-int cmpFilesName(const wchar_t* a, const wchar_t* b)
+static int cmpFilesName(const wchar_t* a, const wchar_t* b)
 {
 	return lstrcmpW(a, b);
 }
 
-int cmpFilesSize(size_t a, size_t b)
+static int cmpFilesSize(size_t a, size_t b)
 {
 	return (a > b ? 1 : -1);
 }
 
-int cmpFilesDate(Date a, Date b)
+static int cmpFilesDate(Date a, Date b)
 {
 	if (a.year != b.year)
 		return (a.year > b.year ? 1 : -1);
@@ -257,7 +254,7 @@ int cmpFilesDate(Date a, Date b)
 	return 0;
 }
 
-int cmpFilesType(const wchar_t* a, const wchar_t* b)
+static int cmpFilesType(const wchar_t* a, const wchar_t* b)
 {
 	size_t aLen = lstrlenW(a);
 	size_t bLen = lstrlenW(b);
@@ -282,7 +279,7 @@ int cmpFilesType(const wchar_t* a, const wchar_t* b)
 	return cmpFilesName(a + aExt, b + bExt);
 }
 
-int cmpFilesNameTop(File const* a, File const* b)
+static int cmpFilesNameTop(File const* a, File const* b)
 {
 	if (!a->isFile && b->isFile)
 		return 1;
@@ -292,7 +289,7 @@ int cmpFilesNameTop(File const* a, File const* b)
 	return -cmpFilesName(a->name, b->name);
 }
 
-int cmpFilesNameInvTop(File const* a, File const* b)
+static int cmpFilesNameInvTop(File const* a, File const* b)
 {
 	if (!a->isFile && b->isFile)
 		return 1;
@@ -302,7 +299,7 @@ int cmpFilesNameInvTop(File const* a, File const* b)
 	return cmpFilesName(a->name, b->name);
 }
 
-int cmpFilesSizeTop(File const* a, File const* b)
+static int cmpFilesSizeTop(File const* a, File const* b)
 {
 	if (!a->isFile && b->isFile)
 		return 1;
@@ -315,7 +312,7 @@ int cmpFilesSizeTop(File const* a, File const* b)
 	return -cmpFilesName(a->name, b->name);
 }
 
-int cmpFilesSizeInvTop(File const* a, File const* b)
+static int cmpFilesSizeInvTop(File const* a, File const* b)
 {
 	if (!a->isFile && b->isFile)
 		return 1;
@@ -328,7 +325,7 @@ int cmpFilesSizeInvTop(File const* a, File const* b)
 	return -cmpFilesName(a->name, b->name);
 }
 
-int cmpFilesCreateTop(File const* a, File const* b)
+static int cmpFilesCreateTop(File const* a, File const* b)
 {
 	if (!a->isFile && b->isFile)
 		return 1;
@@ -341,7 +338,7 @@ int cmpFilesCreateTop(File const* a, File const* b)
 	return -cmpFilesName(a->name, b->name);
 }
 
-int cmpFilesCreateInvTop(File const* a, File const* b)
+static int cmpFilesCreateInvTop(File const* a, File const* b)
 {
 	if (!a->isFile && b->isFile)
 		return 1;
@@ -354,7 +351,7 @@ int cmpFilesCreateInvTop(File const* a, File const* b)
 	return -cmpFilesName(a->name, b->name);
 }
 
-int cmpFilesWriteTop(File const* a, File const* b)
+static int cmpFilesWriteTop(File const* a, File const* b)
 {
 	if (!a->isFile && b->isFile)
 		return 1;
@@ -367,7 +364,7 @@ int cmpFilesWriteTop(File const* a, File const* b)
 	return -cmpFilesName(a->name, b->name);
 }
 
-int cmpFilesWriteInvTop(File const* a, File const* b)
+static int cmpFilesWriteInvTop(File const* a, File const* b)
 {
 	if (!a->isFile && b->isFile)
 		return 1;
@@ -380,7 +377,7 @@ int cmpFilesWriteInvTop(File const* a, File const* b)
 	return -cmpFilesName(a->name, b->name);
 }
 
-int cmpFilesTypeTop(File const* a, File const* b)
+static int cmpFilesTypeTop(File const* a, File const* b)
 {
 	if (!a->isFile && b->isFile)
 		return 1;
@@ -396,7 +393,7 @@ int cmpFilesTypeTop(File const* a, File const* b)
 	return -cmpFilesName(a->name, b->name);
 }
 
-int cmpFilesTypeInvTop(File const* a, File const* b)
+static int cmpFilesTypeInvTop(File const* a, File const* b)
 {
 	if (!a->isFile && b->isFile)
 		return 1;

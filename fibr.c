@@ -2,7 +2,7 @@
 
 #include <Windows.h>
 
-void initCurrentDir(wchar_t** currentDir)
+static void initCurrentDir(wchar_t** currentDir)
 {
 	wchar_t* dir = NULL;
 	int numArgs;
@@ -39,7 +39,7 @@ void initCurrentDir(wchar_t** currentDir)
 	*currentDir = dir;
 }
 
-void enableVT()
+static void enableVT()
 {
 	HANDLE hConsole = GetStdHandle(STD_OUTPUT_HANDLE);
 	DWORD mode = 0;
@@ -54,7 +54,7 @@ void enableVT()
 	fputs("\x1B[? 1 0 4 9 h", stdout); // new screen buffer
 }
 
-void printFileArray(FileArray fileArray, int highlight, int start, int end, int maxNameLen)
+static void printFileArray(FileArray fileArray, int highlight, int start, int end, int maxNameLen)
 {
 	for (size_t i = start; i < end; ++i)
 	{
@@ -101,7 +101,7 @@ void printFileArray(FileArray fileArray, int highlight, int start, int end, int 
 	}
 }
 
-bool getConsoleSize(int* w, int* h)
+static bool getConsoleSize(int* w, int* h)
 {
 	static int sw = 0, sh = 0;
 
@@ -128,7 +128,7 @@ typedef struct DirStack
 	size_t size;
 } DirStack;
 
-void dirStackPush(DirStack* stack, const wchar_t* dir)
+static void dirStackPush(DirStack* stack, const wchar_t* dir)
 {
 	wchar_t** temp = realloc(stack->data, sizeof(wchar_t*) * (stack->size + 1));
 	if (temp)
@@ -161,7 +161,7 @@ void dirStackPush(DirStack* stack, const wchar_t* dir)
 	}
 }
 
-wchar_t* dirStackPop(DirStack* stack)
+static wchar_t* dirStackPop(DirStack* stack)
 {
 	if (stack->size)
 	{
@@ -171,7 +171,7 @@ wchar_t* dirStackPop(DirStack* stack)
 	return NULL;
 }
 
-void dirStackInit(DirStack* stack, const wchar_t* path)
+static void dirStackInit(DirStack* stack, const wchar_t* path)
 {
 	stack->data = NULL;
 	stack->size = 0;
@@ -268,11 +268,11 @@ int main()
 
 			if (retDir)
 			{
-				for (size_t i = 0; i < fileArray.count; ++i)
+				for (int i = 0; i < fileArray.count; ++i)
 				{
 					if (lstrcmpW(fileArray.files[i].name, retDir) == 0)
 					{
-						highlight = fileArray.count - 1 - i;
+						highlight = (int)fileArray.count - 1 - i;
 						break;
 					}
 				}
@@ -316,7 +316,7 @@ int main()
 				start = 0;
 			}
 			if (end > fileArray.count)
-				end = fileArray.count;
+				end = (int)fileArray.count;
 			if (end - start > consoleH - 3)
 				end = consoleH - 3 + start;
 
@@ -340,10 +340,10 @@ int main()
 		int keyRepWait = 6;
 		if (keydown && (downLast + keyRepWait - 1) / keyRepWait != 1)
 		{
-			if (highlight + 1 < fileArray.count)
+			if (highlight + 1ull < fileArray.count)
 			{
 				if (ctrl)
-					highlight = min((long long)fileArray.count - 1, highlight + 5);
+					highlight = min((int)fileArray.count - 1, highlight + 5);
 				else
 					++highlight;
 				reprint = true;
