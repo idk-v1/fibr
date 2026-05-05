@@ -294,7 +294,7 @@ int main()
 			fputs("\x1B[?25l", stdout); // hides cursor
 			fputs("\x1B[;H", stdout); // reset cursor
 			fputs("\x1B[37m", stdout); // set fg color to gray
-			wprintf(L"%s", currentDir + 4);
+			wprintf(L"%.*s", consoleW, currentDir + 4);
 
 			fputs("\x1B[0K\n", stdout); // clear line after cursor
 
