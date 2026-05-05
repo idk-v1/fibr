@@ -53,7 +53,7 @@ static void enableVT()
 	
 	fputs("\x1B[? 1 0 4 9 h", stdout); // new screen buffer
 
-	fputs("\x1B]0;FiBr File Browser 0.1.2\x07", stdout);
+	fputs("\x1B]0;FiBr File Browser 0.1.3\x07", stdout);
 }
 
 static void resetTerminal()
@@ -104,7 +104,7 @@ static void printFileArray(FileArray fileArray, int highlight, int start, int en
 				++unit;
 				size /= 1000;
 			}
-			printf("%3llu %cB|", size, " KMGTPE"[unit]);
+			printf("%3llu %cB |", size, " KMGTPE"[unit]);
 		}
 		else
 		{
@@ -114,9 +114,9 @@ static void printFileArray(FileArray fileArray, int highlight, int start, int en
 				wprintf(L"%-*.*s...| ", maxNameLen - 3, maxNameLen - 3, file.name);
 			else
 				wprintf(L"%-*.*s| ", maxNameLen, maxNameLen, file.name);
-			printf("%6llu|", file.size);
+			printf("%6llu |", file.size);
 		}
-		printf("%04u/%02u/%02u %02u:%02u|%04u/%02u/%02u %02u:%02u|",
+		printf(" %04u/%02u/%02u %02u:%02u | %04u/%02u/%02u %02u:%02u |",
 			file.createTime.year, file.createTime.month, file.createTime.day, file.createTime.hour, file.createTime.minute,
 			file.writeTime.year, file.writeTime.month, file.writeTime.day, file.writeTime.hour, file.writeTime.minute);
 		fputs("\x1B[40m", stdout); // set bg color to black
@@ -274,7 +274,7 @@ int main()
 		if (getConsoleSize(&consoleW, &consoleH))
 		{
 			reprint = true;
-			maxNameLen = consoleW - 46;
+			maxNameLen = consoleW - 51;
 		}
 
 		if (dirChanged)
@@ -319,7 +319,7 @@ int main()
 			fputs("\x1B[3;r", stdout); // set scroll region
 			fputs("\x1B[?25l", stdout); // hides cursor
 			fputs("\x1B[;H", stdout); // reset cursor
-			fputs("\x1B[37m", stdout); // set fg color to gray
+			fputs("\x1B[95m", stdout); // set fg color to magenta
 			size_t pathLen = lstrlenW(currentDir + 4);
 			if (pathLen >= consoleW)
 				wprintf(L"%s", currentDir + 4 + (pathLen - consoleW + 1));
@@ -328,8 +328,8 @@ int main()
 
 			fputs("\x1B[0K\n", stdout); // clear line after cursor
 
-			printf("| %-*s%c%c| Size %c| Create        %c| Write         %c|", maxNameLen - 2, "Name",
-				(sortMethod == SORT_TYPE || sortMethod == SORT_TYPE_INV ? 'T' : ' '),
+			printf("| %-*s%c%c| Size  %c| Create          %c| Write           %c|", maxNameLen - 2, "Name",
+				(sortMethod == SORT_TYPE || sortMethod == SORT_TYPE_INV ? 't' : ' '),
 				(sortMethod == SORT_NAME || sortMethod == SORT_TYPE ? '^' : (sortMethod == SORT_NAME_INV || sortMethod == SORT_TYPE_INV ? 'v' : ' ')),
 				(sortMethod == SORT_SIZE ? '^' : (sortMethod == SORT_SIZE_INV ? 'v' : ' ')),
 				(sortMethod == SORT_CREATE ? '^' : (sortMethod == SORT_CREATE_INV ? 'v' : ' ')),
