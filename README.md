@@ -17,4 +17,8 @@ White entries are files.<br>
   - S sorts by size/count
   - C sorts by creation date
   - W sorts by last write date
-- Escape exits program
+- Escape exits program<br>
+
+## Screenshots:<br>
+![screenshot0.png](screenshot0.png)<br>
+![screenshot1.png](screenshot1.png)<br>
