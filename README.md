@@ -1,4 +1,4 @@
-# Terminal file browser<br>
+# Terminal <ins>FI</ins>le <ins>BR</ins>owser<br>
 <br>
 Yellow entries are directories.<br>
 White entries are files.<br>
