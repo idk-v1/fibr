@@ -53,7 +53,7 @@ static void enableVT()
 	
 	fputs("\x1B[? 1 0 4 9 h", stdout); // new screen buffer
 
-	fputs("\x1B]0;FiBr File Browser 0.1.1\x07", stdout);
+	fputs("\x1B]0;FiBr File Browser 0.1.2\x07", stdout);
 }
 
 static void resetTerminal()
@@ -81,17 +81,21 @@ static void printFileArray(FileArray fileArray, int highlight, int start, int en
 		File file = fileArray.files[fileArray.count - 1 - i];
 		if (i == highlight)
 		{
-			fputs("\x1B[100m", stdout); // set bg color to gray
+			fputs("\x1B[45m", stdout); // set bg color to magenta
 		}
 
 		if (file.isFile)
 		{
-			fputs("\x1B[97m", stdout); // set fg color to white
-			fputs("  ", stdout);
-			if (lstrlenW(file.name) > maxNameLen)
-				wprintf(L"%-*.*s...  ", maxNameLen - 3, maxNameLen - 3, file.name);
+			if (file.isArchive)
+				fputs("\x1B[96m", stdout); // set fg color to cyan
 			else
-				wprintf(L"%-*.*s  ", maxNameLen, maxNameLen, file.name);
+				fputs("\x1B[97m", stdout); // set fg color to white
+
+			fputs("| ", stdout);
+			if (lstrlenW(file.name) > maxNameLen)
+				wprintf(L"%-*.*s...| ", maxNameLen - 3, maxNameLen - 3, file.name);
+			else
+				wprintf(L"%-*.*s| ", maxNameLen, maxNameLen, file.name);
 
 			int unit = 0;
 			size_t size = file.size;
@@ -100,19 +104,19 @@ static void printFileArray(FileArray fileArray, int highlight, int start, int en
 				++unit;
 				size /= 1000;
 			}
-			printf("%3llu %cB ", size, " KMGTPE"[unit]);
+			printf("%3llu %cB|", size, " KMGTPE"[unit]);
 		}
 		else
 		{
-			fputs("\x1B[93m", stdout); // set fg color to yellow
+			fputs("\x1B[36m", stdout); // set fg color to blue (dark cyan)
 			fputs("> ", stdout);
 			if (lstrlenW(file.name) > maxNameLen)
-				wprintf(L"%-*.*s...  ", maxNameLen - 3, maxNameLen - 3, file.name);
+				wprintf(L"%-*.*s...| ", maxNameLen - 3, maxNameLen - 3, file.name);
 			else
-				wprintf(L"%-*.*s  ", maxNameLen, maxNameLen, file.name);
-			printf("%6llu ", file.size);
+				wprintf(L"%-*.*s| ", maxNameLen, maxNameLen, file.name);
+			printf("%6llu|", file.size);
 		}
-		printf("%04u/%02u/%02u %02u:%02u %04u/%02u/%02u %02u:%02u",
+		printf("%04u/%02u/%02u %02u:%02u|%04u/%02u/%02u %02u:%02u|",
 			file.createTime.year, file.createTime.month, file.createTime.day, file.createTime.hour, file.createTime.minute,
 			file.writeTime.year, file.writeTime.month, file.writeTime.day, file.writeTime.hour, file.writeTime.minute);
 		fputs("\x1B[40m", stdout); // set bg color to black
@@ -231,6 +235,8 @@ int main()
 
 	enableVT();
 
+	HWND consoleWnd = GetConsoleWindow();
+
 	wchar_t* currentDir = NULL;
 	initCurrentDir(&currentDir);
 
@@ -314,7 +320,11 @@ int main()
 			fputs("\x1B[?25l", stdout); // hides cursor
 			fputs("\x1B[;H", stdout); // reset cursor
 			fputs("\x1B[37m", stdout); // set fg color to gray
-			wprintf(L"%.*s", consoleW, currentDir + 4);
+			size_t pathLen = lstrlenW(currentDir + 4);
+			if (pathLen >= consoleW)
+				wprintf(L"%s", currentDir + 4 + (pathLen - consoleW + 1));
+			else
+				wprintf(L"%s", currentDir + 4);
 
 			fputs("\x1B[0K\n", stdout); // clear line after cursor
 
@@ -346,125 +356,128 @@ int main()
 
 		}
 
-		bool ctrl = GetKeyState(VK_CONTROL) & 0x8000;
-		bool keydown = GetKeyState(VK_DOWN) & 0x8000;
-		bool keyup = GetKeyState(VK_UP) & 0x8000;
-		bool keyright = GetKeyState(VK_RIGHT) & 0x8000;
-		bool keyleft = GetKeyState(VK_LEFT) & 0x8000;
-
-		loadSubdirs = !ctrl;
-
-		if (GetKeyState(VK_ESCAPE) & 0x8000)
-			running = false;
-
-		int keyRepWait = 6;
-		if (keydown && (downLast + keyRepWait - 1) / keyRepWait != 1)
+		if (consoleWnd == GetForegroundWindow())
 		{
-			if (highlight + 1ull < fileArray.count)
+			bool ctrl = GetKeyState(VK_CONTROL) & 0x8000;
+			bool keydown = GetKeyState(VK_DOWN) & 0x8000;
+			bool keyup = GetKeyState(VK_UP) & 0x8000;
+			bool keyright = GetKeyState(VK_RIGHT) & 0x8000;
+			bool keyleft = GetKeyState(VK_LEFT) & 0x8000;
+
+			loadSubdirs = !ctrl;
+
+			if (GetKeyState(VK_ESCAPE) & 0x8000)
+				running = false;
+
+			int keyRepWait = 6;
+			if (keydown && (downLast + keyRepWait - 1) / keyRepWait != 1)
 			{
-				if (ctrl)
-					highlight = min((int)fileArray.count - 1, highlight + 5);
-				else
-					++highlight;
-				reprint = true;
+				if (highlight + 1ull < fileArray.count)
+				{
+					if (ctrl)
+						highlight = min((int)fileArray.count - 1, highlight + 5);
+					else
+						++highlight;
+					reprint = true;
+				}
 			}
-		}
-		if (keyup && (upLast + keyRepWait - 1) / keyRepWait != 1)
-		{
-			if (highlight > 0)
+			if (keyup && (upLast + keyRepWait - 1) / keyRepWait != 1)
 			{
-				if (ctrl)
-					highlight = max(0, highlight - 5);
-				else
-					--highlight;
-				reprint = true;
+				if (highlight > 0)
+				{
+					if (ctrl)
+						highlight = max(0, highlight - 5);
+					else
+						--highlight;
+					reprint = true;
+				}
 			}
-		}
-		if (keyright && !rightLast)
-		{
-			if (fileArray.count && !fileArray.files[fileArray.count - 1 - highlight].isFile)
+			if (keyright && !rightLast)
+			{
+				if (fileArray.count && !fileArray.files[fileArray.count - 1 - highlight].isFile)
+				{
+					dirChanged = true;
+					bool error = false;
+					currentDir = moveDirDown(currentDir, fileArray.files[fileArray.count - 1 - highlight].name, &error);
+					dirStackPush(&dirStack, fileArray.files[fileArray.count - 1 - highlight].name);
+				}
+			}
+			if (keyleft && !leftLast)
 			{
 				dirChanged = true;
+
 				bool error = false;
-				currentDir = moveDirDown(currentDir, fileArray.files[fileArray.count - 1 - highlight].name, &error);
-				dirStackPush(&dirStack, fileArray.files[fileArray.count - 1 - highlight].name);
-			}
-		}
-		if (keyleft && !leftLast)
-		{
-			dirChanged = true;
+				currentDir = moveDirUp(currentDir, &error);
+				if (error)
+				{
+					// remove later
+					dirChanged = false;
 
-			bool error = false;
-			currentDir = moveDirUp(currentDir, &error);
-			if (error)
+					// go to disk view
+				}
+
+				retDir = dirStackPop(&dirStack);
+			}
+
+			if (keydown) ++downLast;
+			else downLast = 0;
+			if (keyup) ++upLast;
+			else upLast = 0;
+			rightLast = keyright;
+			leftLast = keyleft;
+
+			bool nKey = GetKeyState('N') & 0x8000;
+			bool tKey = GetKeyState('T') & 0x8000;
+			bool sKey = GetKeyState('S') & 0x8000;
+			bool cKey = GetKeyState('C') & 0x8000;
+			bool wKey = GetKeyState('W') & 0x8000;
+			if (nKey && !nLast)
 			{
-				// remove later
-				dirChanged = false;
-
-				// go to disk view
+				if (sortMethod == SORT_NAME)
+					sortMethod = SORT_NAME_INV;
+				else
+					sortMethod = SORT_NAME;
+				resort = true;
+			}
+			if (tKey && !tLast)
+			{
+				if (sortMethod == SORT_TYPE)
+					sortMethod = SORT_TYPE_INV;
+				else
+					sortMethod = SORT_TYPE;
+				resort = true;
+			}
+			if (sKey && !sLast)
+			{
+				if (sortMethod == SORT_SIZE)
+					sortMethod = SORT_SIZE_INV;
+				else
+					sortMethod = SORT_SIZE;
+				resort = true;
+			}
+			if (cKey && !cLast)
+			{
+				if (sortMethod == SORT_CREATE)
+					sortMethod = SORT_CREATE_INV;
+				else
+					sortMethod = SORT_CREATE;
+				resort = true;
+			}
+			if (wKey && !wLast)
+			{
+				if (sortMethod == SORT_WRITE)
+					sortMethod = SORT_WRITE_INV;
+				else
+					sortMethod = SORT_WRITE;
+				resort = true;
 			}
 
-			retDir = dirStackPop(&dirStack);
+			nLast = nKey;
+			tLast = tKey;
+			sLast = sKey;
+			cLast = cKey;
+			wLast = wKey;
 		}
-
-		if (keydown) ++downLast;
-		else downLast = 0;
-		if (keyup) ++upLast;
-		else upLast = 0;
-		rightLast = keyright;
-		leftLast = keyleft;
-
-		bool nKey = GetKeyState('N') & 0x8000;
-		bool tKey = GetKeyState('T') & 0x8000;
-		bool sKey = GetKeyState('S') & 0x8000;
-		bool cKey = GetKeyState('C') & 0x8000;
-		bool wKey = GetKeyState('W') & 0x8000;
-		if (nKey && !nLast)
-		{
-			if (sortMethod == SORT_NAME)
-				sortMethod = SORT_NAME_INV;
-			else
-				sortMethod = SORT_NAME;
-			resort = true;
-		}
-		if (tKey && !tLast)
-		{
-			if (sortMethod == SORT_TYPE)
-				sortMethod = SORT_TYPE_INV;
-			else
-				sortMethod = SORT_TYPE;
-			resort = true;
-		}
-		if (sKey && !sLast)
-		{
-			if (sortMethod == SORT_SIZE)
-				sortMethod = SORT_SIZE_INV;
-			else
-				sortMethod = SORT_SIZE;
-			resort = true;
-		}
-		if (cKey && !cLast)
-		{
-			if (sortMethod == SORT_CREATE)
-				sortMethod = SORT_CREATE_INV;
-			else
-				sortMethod = SORT_CREATE;
-			resort = true;
-		}
-		if (wKey && !wLast)
-		{
-			if (sortMethod == SORT_WRITE)
-				sortMethod = SORT_WRITE_INV;
-			else
-				sortMethod = SORT_WRITE;
-			resort = true;
-		}
-
-		nLast = nKey;
-		tLast = tKey;
-		sLast = sKey;
-		cLast = cKey;
-		wLast = wKey;
 
 		Sleep(50);
 	}

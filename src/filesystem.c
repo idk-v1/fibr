@@ -23,6 +23,39 @@ static Date dateFromFiletime(FILETIME ft)
 	return date;
 }
 
+static bool isArchive(const wchar_t* name)
+{
+	const wchar_t* exts[] =
+	{
+		L"zip",
+		L"7z",
+		L"tar",
+		L"gz"
+	};
+
+	size_t len = lstrlenW(name);
+	int extPos = -1;
+	for (int i = len - 1; i >= 0; --i)
+	{
+		if (name[i] == L'.')
+		{
+			extPos = i + 1;
+			break;
+		}
+	}
+	if (extPos == -1)
+		return false;
+
+	for (size_t i = 0; i < 4; ++i)
+	{
+		if (lstrcmpiW(name + extPos, exts[i]) == 0)
+			return true;
+	}
+
+	return false;
+}
+
+
 FileArray getFilesInDir(const wchar_t* path, bool subdirCount)
 {
 	if (!path)
@@ -115,14 +148,21 @@ FileArray getFilesInDir(const wchar_t* path, bool subdirCount)
 		{
 			LARGE_INTEGER fileSize = { .HighPart = findData.nFileSizeHigh, .LowPart = findData.nFileSizeLow };
 			file.size = fileSize.QuadPart;
+
+			file.isArchive = isArchive(file.name);
 		}
 		else if (subdirCount)
 		{
 			wchar_t* subdir = strSubdir(path, file.name);
 			file.size = getFileCountInDir(subdir);
 			free(subdir);
+			file.isArchive = 0;
 		}
-		else file.size = 0;
+		else
+		{
+			file.size = 0;
+			file.isArchive = 0;
+		}
 
 		file.createTime = dateFromFiletime(findData.ftCreationTime);
 		file.writeTime = dateFromFiletime(findData.ftLastWriteTime);

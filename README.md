@@ -1,6 +1,7 @@
 # Terminal <ins>FI</ins>le <ins>BR</ins>owser<br>
 <br>
-Yellow entries are directories.<br>
+Blue entries are directories.<br>
+Cyan entries are archives.<br>
 White entries are files.<br>
 
 ## Controls:<br>

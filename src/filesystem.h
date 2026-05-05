@@ -17,8 +17,9 @@ typedef struct Date
 
 typedef struct File
 {
-	uint64_t isFile   : 1;
-	uint64_t size    : 63;
+	uint64_t isFile    : 1;
+	uint64_t isArchive : 1;
+	uint64_t size     : 62;
 	Date createTime;
 	Date writeTime;
 	wchar_t* name;
