@@ -55,7 +55,7 @@ DriveArray getDrives()
 
 			Drive drive = { 0 };
 
-			LARGE_INTEGER totalSpace = { 0 }, freeSpace = { 0 };
+			ULARGE_INTEGER totalSpace = { 0 }, freeSpace = { 0 };
 			GetDiskFreeSpaceExW(buf, NULL, &totalSpace, &freeSpace);
 			drive.capacity = totalSpace.QuadPart;
 			drive.free = freeSpace.QuadPart;
