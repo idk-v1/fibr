@@ -61,6 +61,15 @@ wchar_t* moveDirUp(wchar_t* dir, bool* error);
 wchar_t* moveDirDown(wchar_t* dir, const wchar_t* subdir, bool* error);
 
 
+
+typedef struct Drive
+{
+	wchar_t* name;
+	wchar_t* path;
+	size_t capacity;
+	size_t used;
+} Drive;
+
 typedef struct DriveArray
 {
 	wchar_t** drives; // attempts to use drive letter path, else uses long path

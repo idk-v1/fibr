@@ -71,7 +71,7 @@ DriveArray getDrives()
 			}
 			else // no drive letter
 			{
-				size_t len = wcslen(buf);
+				size_t len = wcslen(buf) - 4;
 				drive = malloc(sizeof(wchar_t) * len);
 				if (!drive)
 				{
@@ -79,7 +79,7 @@ DriveArray getDrives()
 					FindVolumeClose(hVol);
 					return array;
 				}
-				memcpy(drive, devName, sizeof(wchar_t) * len);
+				memcpy(drive, buf + 4, sizeof(wchar_t) * len);
 				drive[len - 1] = 0;
 			}
 			array.drives[array.count] = drive;
@@ -612,28 +612,25 @@ wchar_t* moveDirUp(wchar_t* dir, bool* error)
 	size_t pos = len - 1;
 
 	for (size_t i = len - 1; i > 0; --i)
+	{
 		if (dir[i] == L'\\')
 		{
 			pos = i;
 			break;
 		}
-
-	if (pos == 0)
-	{
-		*error = true;
-		return dir;
-	}
-	if (pos == 3)
-	{
-		if (pos + 1 == len)
+		if (dir[i] == L'?') // no more
 		{
 			*error = true;
 			return dir;
 		}
-		dir[4] = 0;
 	}
-	else
-		dir[pos] = 0;
+
+	if (pos == 0) // no more
+	{
+		*error = true;
+		return dir;
+	}
+	dir[pos] = 0;
 	return dir;
 }
 

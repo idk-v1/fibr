@@ -328,11 +328,11 @@ int main()
 			fputs("\x1B[?25l", stdout); // hides cursor
 			fputs("\x1B[;H", stdout); // reset cursor
 			fputs("\x1B[95m", stdout); // set fg color to magenta
-			size_t pathLen = wcslen(currentDir + 4);
+			size_t pathLen = wcslen(currentDir);
 			if (pathLen >= consoleW)
-				wprintf(L"%s", currentDir + 4 + (pathLen - consoleW + 1));
+				wprintf(L"%s", currentDir + (pathLen - consoleW + 1));
 			else
-				wprintf(L"%s", currentDir + 4);
+				wprintf(L"%s", currentDir);
 
 			fputs("\x1B[0K\n", stdout); // clear line after cursor
 
