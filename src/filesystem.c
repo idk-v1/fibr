@@ -624,7 +624,14 @@ wchar_t* moveDirUp(wchar_t* dir, bool* error)
 		return dir;
 	}
 	if (pos == 3)
+	{
+		if (pos + 1 == len)
+		{
+			*error = true;
+			return dir;
+		}
 		dir[4] = 0;
+	}
 	else
 		dir[pos] = 0;
 	return dir;
