@@ -53,7 +53,7 @@ static void enableVT()
 	
 	fputs("\x1B[? 1 0 4 9 h", stdout); // new screen buffer
 
-	fputs("\x1B]0;FiBr File Browser 0.1.4\x07", stdout);
+	fputs("\x1B]0;FiBr File Browser 0.1.5\x07", stdout);
 }
 
 static void resetTerminal()
@@ -124,6 +124,68 @@ static void printFileArray(FileArray fileArray, int highlight, int start, int en
 		printf(" %04u/%02u/%02u %02u:%02u | %04u/%02u/%02u %02u:%02u |",
 			file.createTime.year, file.createTime.month, file.createTime.day, file.createTime.hour, file.createTime.minute,
 			file.writeTime.year, file.writeTime.month, file.writeTime.day, file.writeTime.hour, file.writeTime.minute);
+		fputs("\x1B[40m", stdout); // set bg color to black
+		fputs("\x1B[0K", stdout); // clear line after cursor
+		fputs("\n", stdout);
+	}
+}
+
+static void printDriveArray(DriveArray driveArray, int highlight, int start, int end, int maxNameLen)
+{
+	for (size_t i = start; i < end; ++i)
+	{
+		Drive drive = driveArray.drives[driveArray.count - 1 - i];
+		if (i == highlight)
+		{
+			fputs("\x1B[45m", stdout); // set bg color to magenta
+		}
+
+		fputs("\x1B[36m", stdout); // set fg color to blue (dark cyan)
+		fputs("# ", stdout);
+		size_t drNameLen = wcslen(drive.name);
+		size_t drPathLen = wcslen(drive.path);
+		wchar_t* name = malloc(sizeof(wchar_t) * (drNameLen + drPathLen + 3 + 1));
+		if (name)
+		{
+			memcpy(name, drive.name, sizeof(wchar_t) * drNameLen);
+			name[drNameLen + 0] = L' ';
+			name[drNameLen + 1] = L'(';
+			memcpy(name + drNameLen + 2, drive.path, sizeof(wchar_t) * drPathLen);
+			name[drNameLen + 2 + drPathLen + 0] = L')';
+			name[drNameLen + 2 + drPathLen + 1] = 0;
+
+			if (wcslen(name) > maxNameLen)
+				wprintf(L"%-*.*s...| ", maxNameLen - 3, maxNameLen - 3, name);
+			else
+				wprintf(L"%-*.*s| ", maxNameLen, maxNameLen, name);
+
+			free(name);
+		}
+		else
+		{
+			if (wcslen(drive.name) > maxNameLen)
+				wprintf(L"%-*.*s...| ", maxNameLen - 3, maxNameLen - 3, drive.name);
+			else
+				wprintf(L"%-*.*s| ", maxNameLen, maxNameLen, drive.name);
+		}
+		
+		int capUnit = 0;
+		size_t cap = drive.capacity;
+		while (cap / 1000)
+		{
+			++capUnit;
+			cap /= 1000;
+		}
+		int freeUnit = 0;
+		size_t free = drive.free;
+		while (free / 1000)
+		{
+			++freeUnit;
+			free /= 1000;
+		}
+
+		printf("%3llu %cB free of %3llu %cB |", free, " KMGTPE"[freeUnit], cap, " KMGTPE"[capUnit]);
+		
 		fputs("\x1B[40m", stdout); // set bg color to black
 		fputs("\x1B[0K", stdout); // clear line after cursor
 		fputs("\n", stdout);
@@ -248,7 +310,11 @@ int main()
 	DirStack dirStack = { 0 };
 	dirStackInit(&dirStack, currentDir);
 
+	size_t dataCount = 0;
 	FileArray fileArray = { 0 };
+	DriveArray driveArray = { 0 };
+	bool isFileArray = wcslen(currentDir) > 4;
+
 	int highlight = 0;
 	int downLast = 0;
 	int upLast = 0;
@@ -265,6 +331,7 @@ int main()
 	bool sLast = false;
 	bool cLast = false;
 	bool wLast = false;
+	bool pLast = false;
 
 	bool loadSubdirs = true;
 
@@ -279,47 +346,91 @@ int main()
 		if (getConsoleSize(&consoleW, &consoleH))
 		{
 			reprint = true;
-			maxNameLen = consoleW - 51;
+			if (isFileArray)
+				maxNameLen = consoleW - 51;
+			else
+				maxNameLen = consoleW - 28;
 		}
 
 		if (dirChanged)
 		{
 			dirChanged = false;
 			reprint = true;
-			resort = true;
 
 			highlight = 0;
 
-			freeFileArray(&fileArray);
-			if (wcslen(currentDir) > 4)
-				fileArray = getFilesInDir(currentDir, loadSubdirs);
+			if (isFileArray)
+				freeFileArray(&fileArray);
 			else
-				fileArray = getDrivesAsFileArray();
+				freeDriveArray(&driveArray);
+
+			if (wcslen(currentDir) > 4)
+			{
+				fileArray = getFilesInDir(currentDir, loadSubdirs);
+				dataCount = fileArray.count;
+				isFileArray = true;
+				
+				// Needs to be sorted for highlight to be correct
+				if (sortMethod == SORT_PATH || sortMethod == SORT_PATH_INV)
+					sortMethod = SORT_NAME;
+				sortFileArray(&fileArray, sortMethod);
+				if (retDir)
+				{
+					for (int i = 0; i < fileArray.count; ++i)
+					{
+						if (wcscmp(fileArray.files[i].name, retDir) == 0)
+						{
+							highlight = (int)fileArray.count - 1 - i;
+							break;
+						}
+					}
+
+					free(retDir);
+					retDir = NULL;
+				}
+			}
+			else
+			{
+				driveArray = getDrives();
+				dataCount = driveArray.count;
+				isFileArray = false;
+
+				// Needs to be sorted for highlight to be correct
+				if (sortMethod == SORT_TYPE || sortMethod == SORT_TYPE_INV || 
+					sortMethod == SORT_CREATE || sortMethod == SORT_CREATE_INV ||
+					sortMethod == SORT_WRITE || sortMethod == SORT_WRITE_INV)
+					sortMethod = SORT_NAME;
+				sortDriveArray(&driveArray, sortMethod);
+				if (retDir)
+				{
+					for (int i = 0; i < driveArray.count; ++i)
+					{
+						if (wcscmp(driveArray.drives[i].path, retDir) == 0)
+						{
+							highlight = (int)driveArray.count - 1 - i;
+							break;
+						}
+					}
+
+					free(retDir);
+					retDir = NULL;
+				}
+
+				// impl sort later
+			}
 
 			resort = false;
 			reprint = true;
-			sortFileArray(fileArray, sortMethod);
-
-			if (retDir)
-			{
-				for (int i = 0; i < fileArray.count; ++i)
-				{
-					if (wcscmp(fileArray.files[i].name, retDir) == 0)
-					{
-						highlight = (int)fileArray.count - 1 - i;
-						break;
-					}
-				}
-
-				free(retDir);
-				retDir = NULL;
-			}
 		}
 		if (resort)
 		{
 			resort = false;
 			reprint = true;
-			sortFileArray(fileArray, sortMethod);
+
+			if (isFileArray)
+				sortFileArray(&fileArray, sortMethod);
+			else
+				sortDriveArray(&driveArray, sortMethod);
 		}
 		if (reprint)
 		{
@@ -329,20 +440,36 @@ int main()
 			fputs("\x1B[;H", stdout); // reset cursor
 			fputs("\x1B[95m", stdout); // set fg color to magenta
 			size_t pathLen = wcslen(currentDir);
-			if (pathLen >= consoleW)
-				wprintf(L"%s", currentDir + (pathLen - consoleW + 1));
-			else
-				wprintf(L"%s", currentDir);
+			if (isFileArray)
+			{
+				if (pathLen - 4 >= consoleW)
+					wprintf(L"%s", currentDir + 4 + (pathLen - 4 - consoleW + 1));
+				else
+					wprintf(L"%s", currentDir + 4);
 
-			fputs("\x1B[0K\n", stdout); // clear line after cursor
+				fputs("\x1B[0K\n", stdout); // clear line after cursor
 
-			printf("| %-*s%c%c| Size  %c| Create          %c| Write           %c|", maxNameLen - 2, "Name",
-				(sortMethod == SORT_TYPE || sortMethod == SORT_TYPE_INV ? 't' : ' '),
-				(sortMethod == SORT_NAME || sortMethod == SORT_TYPE ? '^' : (sortMethod == SORT_NAME_INV || sortMethod == SORT_TYPE_INV ? 'v' : ' ')),
-				(sortMethod == SORT_SIZE ? '^' : (sortMethod == SORT_SIZE_INV ? 'v' : ' ')),
-				(sortMethod == SORT_CREATE ? '^' : (sortMethod == SORT_CREATE_INV ? 'v' : ' ')),
-				(sortMethod == SORT_WRITE ? '^' : (sortMethod == SORT_WRITE_INV ? 'v' : ' '))
+				printf("| %-*s%c%c| Size  %c| Create          %c| Write           %c|", maxNameLen - 2, "Name",
+					(sortMethod == SORT_TYPE || sortMethod == SORT_TYPE_INV ? 't' : ' '),
+					(sortMethod == SORT_NAME || sortMethod == SORT_TYPE ? '^' : (sortMethod == SORT_NAME_INV || sortMethod == SORT_TYPE_INV ? 'v' : ' ')),
+					(sortMethod == SORT_SIZE ? '^' : (sortMethod == SORT_SIZE_INV ? 'v' : ' ')),
+					(sortMethod == SORT_CREATE ? '^' : (sortMethod == SORT_CREATE_INV ? 'v' : ' ')),
+					(sortMethod == SORT_WRITE ? '^' : (sortMethod == SORT_WRITE_INV ? 'v' : ' '))
 				);
+			}
+			else
+			{
+				wprintf(L"Drives");
+
+				fputs("\x1B[0K\n", stdout); // clear line after cursor
+
+				printf("| %-*s%c%c| Size                 %c|", maxNameLen - 2, "Name",
+					(sortMethod == SORT_PATH || sortMethod == SORT_PATH_INV ? 'p' : ' '),
+					(sortMethod == SORT_NAME || sortMethod == SORT_PATH ? '^' : (sortMethod == SORT_NAME_INV || sortMethod == SORT_PATH_INV ? 'v' : ' ')),
+					(sortMethod == SORT_SIZE ? '^' : (sortMethod == SORT_SIZE_INV ? 'v' : ' '))
+				);
+			}
+
 			fputs("\x1B[0K\n", stdout); // clear line after cursor
 
 
@@ -353,12 +480,17 @@ int main()
 				end -= start + 1;
 				start = 0;
 			}
-			if (end > fileArray.count)
-				end = (int)fileArray.count;
+			if (end > dataCount)
+				end = (int)dataCount;
 			if (end - start > consoleH - 3)
 				end = consoleH - 3 + start;
+			
 
-			printFileArray(fileArray, highlight, start, end, maxNameLen);
+			if (isFileArray)
+				printFileArray(fileArray, highlight, start, end, maxNameLen);
+			else
+				printDriveArray(driveArray, highlight, start, end, maxNameLen);
+
 			fputs("\x1B[40m", stdout); // set bg color to black
 			fputs("\x1B[0J", stdout); // clear screen after cursor
 
@@ -380,10 +512,10 @@ int main()
 			int keyRepWait = 6;
 			if (keydown && (downLast + keyRepWait - 1) / keyRepWait != 1)
 			{
-				if (highlight + 1ull < fileArray.count)
+				if (highlight + 1ull < dataCount)
 				{
 					if (ctrl)
-						highlight = min((int)fileArray.count - 1, highlight + 5);
+						highlight = min((int)dataCount - 1, highlight + 5);
 					else
 						++highlight;
 					reprint = true;
@@ -402,12 +534,25 @@ int main()
 			}
 			if (keyright && !rightLast)
 			{
-				if (fileArray.count && !fileArray.files[fileArray.count - 1 - highlight].isFile)
+				if (isFileArray)
 				{
-					dirChanged = true;
-					bool error = false;
-					currentDir = moveDirDown(currentDir, fileArray.files[fileArray.count - 1 - highlight].name, &error);
-					dirStackPush(&dirStack, fileArray.files[fileArray.count - 1 - highlight].name);
+					if (fileArray.count && !fileArray.files[fileArray.count - 1 - highlight].isFile)
+					{
+						dirChanged = true;
+						bool error = false;
+						currentDir = moveDirDown(currentDir, fileArray.files[fileArray.count - 1 - highlight].name, &error);
+						dirStackPush(&dirStack, fileArray.files[fileArray.count - 1 - highlight].name);
+					}
+				}
+				else
+				{
+					if (driveArray.count)
+					{
+						dirChanged = true;
+						bool error = false;
+						currentDir = moveDirDown(currentDir, driveArray.drives[driveArray.count - 1 - highlight].path, &error);
+						dirStackPush(&dirStack, driveArray.drives[driveArray.count - 1 - highlight].path);
+					}
 				}
 			}
 			if (keyleft && !leftLast)
@@ -434,6 +579,7 @@ int main()
 			bool sKey = GetKeyState('S') & 0x8000;
 			bool cKey = GetKeyState('C') & 0x8000;
 			bool wKey = GetKeyState('W') & 0x8000;
+			bool pKey = GetKeyState('P') & 0x8000;
 			if (nKey && !nLast)
 			{
 				if (sortMethod == SORT_NAME)
@@ -442,7 +588,7 @@ int main()
 					sortMethod = SORT_NAME;
 				resort = true;
 			}
-			if (tKey && !tLast)
+			if (tKey && !tLast && isFileArray)
 			{
 				if (sortMethod == SORT_TYPE)
 					sortMethod = SORT_TYPE_INV;
@@ -458,7 +604,7 @@ int main()
 					sortMethod = SORT_SIZE;
 				resort = true;
 			}
-			if (cKey && !cLast)
+			if (cKey && !cLast && isFileArray)
 			{
 				if (sortMethod == SORT_CREATE)
 					sortMethod = SORT_CREATE_INV;
@@ -466,12 +612,20 @@ int main()
 					sortMethod = SORT_CREATE;
 				resort = true;
 			}
-			if (wKey && !wLast)
+			if (wKey && !wLast && isFileArray)
 			{
 				if (sortMethod == SORT_WRITE)
 					sortMethod = SORT_WRITE_INV;
 				else
 					sortMethod = SORT_WRITE;
+				resort = true;
+			}
+			if (pKey && !pLast && !isFileArray)
+			{
+				if (sortMethod == SORT_PATH)
+					sortMethod = SORT_PATH_INV;
+				else
+					sortMethod = SORT_PATH;
 				resort = true;
 			}
 
@@ -480,6 +634,7 @@ int main()
 			sLast = sKey;
 			cLast = cKey;
 			wLast = wKey;
+			pLast = pKey;
 		}
 
 		Sleep(50);
@@ -493,7 +648,11 @@ int main()
 	
 	if (currentDir)
 		free(currentDir);
-	freeFileArray(&fileArray);
+
+	if (isFileArray)
+		freeFileArray(&fileArray);
+	else
+		freeDriveArray(&driveArray);
 
 	resetTerminal();
 

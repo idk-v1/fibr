@@ -52,10 +52,12 @@ enum
 	SORT_WRITE,
 	SORT_WRITE_INV,
 	SORT_TYPE,
-	SORT_TYPE_INV
+	SORT_TYPE_INV,
+	SORT_PATH,
+	SORT_PATH_INV,
 };
 
-void sortFileArray(FileArray fileArray, int option);
+void sortFileArray(FileArray* fileArray, int option);
 
 wchar_t* moveDirUp(wchar_t* dir, bool* error);
 wchar_t* moveDirDown(wchar_t* dir, const wchar_t* subdir, bool* error);
@@ -65,14 +67,14 @@ wchar_t* moveDirDown(wchar_t* dir, const wchar_t* subdir, bool* error);
 typedef struct Drive
 {
 	wchar_t* name;
-	wchar_t* path;
+	wchar_t* path; // attempts to use drive letter path, else uses long path
 	size_t capacity;
-	size_t used;
+	size_t free;
 } Drive;
 
 typedef struct DriveArray
 {
-	wchar_t** drives; // attempts to use drive letter path, else uses long path
+	Drive* drives;
 	size_t count;
 } DriveArray;
 
@@ -81,3 +83,5 @@ DriveArray getDrives();
 void freeDriveArray(DriveArray* array);
 
 FileArray getDrivesAsFileArray();
+
+void sortDriveArray(DriveArray* driveArray, int option);

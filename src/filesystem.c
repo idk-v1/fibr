@@ -23,7 +23,7 @@ DriveArray getDrives()
 	DriveArray array = { 0 };
 	// for more that 26, unknown number, just double
 	size_t cap = bitcount;
-	array.drives = malloc(sizeof(wchar_t*) * cap);
+	array.drives = malloc(sizeof(Drive) * cap);
 	if (!array.drives)
 	{
 		FindVolumeClose(hVol);
@@ -42,7 +42,7 @@ DriveArray getDrives()
 			if (array.count + 1 > cap)
 			{
 				cap *= 2;
-				wchar_t** temp = realloc(array.drives, sizeof(wchar_t*) * cap);
+				Drive* temp = realloc(array.drives, sizeof(Drive) * cap);
 				if (temp)
 					array.drives = temp;
 				else
@@ -53,35 +53,47 @@ DriveArray getDrives()
 				}
 			}
 
-			wchar_t* drive = NULL;
+			Drive drive = { 0 };
+
+			LARGE_INTEGER totalSpace = { 0 }, freeSpace = { 0 };
+			GetDiskFreeSpaceExW(buf, NULL, &totalSpace, &freeSpace);
+			drive.capacity = totalSpace.QuadPart;
+			drive.free = freeSpace.QuadPart;
+
+			size_t len = wcslen(devName);
+			drive.name = malloc(sizeof(wchar_t) * (len + 1));
+			if (!drive.name)
+			{
+				FindVolumeClose(hVol);
+				return array;
+			}
+			memcpy(drive.name, devName, sizeof(wchar_t) * (len + 1));
+
 			DWORD volNameSize = 0;
 			GetVolumePathNamesForVolumeNameW(buf, devName, MAX_PATH, &volNameSize);
+			const wchar_t* path = NULL;
 			if (volNameSize > 1)
 			{
-				size_t len = volNameSize - 2;
-				drive = malloc(sizeof(wchar_t) * (len + 1));
-				if (!drive)
-				{
-					// return what we have
-					FindVolumeClose(hVol);
-					return array;
-				}
-				memcpy(drive, devName, sizeof(wchar_t) * len);
-				drive[len - 1] = 0;
+				len = volNameSize - 2; // size includes NULL and trailing slash
+				path = devName;
 			}
 			else // no drive letter
 			{
-				size_t len = wcslen(buf) - 4;
-				drive = malloc(sizeof(wchar_t) * len);
-				if (!drive)
-				{
-					// return what we have
-					FindVolumeClose(hVol);
-					return array;
-				}
-				memcpy(drive, buf + 4, sizeof(wchar_t) * len);
-				drive[len - 1] = 0;
+				len = wcslen(buf) - 4;
+				path = buf + 4;
 			}
+				
+			drive.path = malloc(sizeof(wchar_t) * (len + 1));
+			if (!drive.path)
+			{
+				// return what we have
+				free(drive.name);
+				FindVolumeClose(hVol);
+				return array;
+			}
+			memcpy(drive.path, path, sizeof(wchar_t) * len);
+			
+			drive.path[len - 1] = 0;
 			array.drives[array.count] = drive;
 			++array.count;
 		}
@@ -101,7 +113,10 @@ void freeDriveArray(DriveArray* array)
 		if (array->drives)
 		{
 			for (size_t i = 0; i < array->count; ++i)
-				free(array->drives[i]);
+			{
+				free(array->drives[i].name);
+				free(array->drives[i].path);
+			}
 			free(array->drives);
 			array->drives = NULL;
 		}
@@ -124,14 +139,14 @@ FileArray getDrivesAsFileArray()
 	for (size_t i = 0; i < array.count; ++i)
 	{
 		File file = { 0 };
-		file.name = drives.drives[i]; // just steal the child and kill the parent
+		file.name = drives.drives[i].path; // just steal the child and kill the parent
+		free(drives.drives[i].name);
 		array.files[i] = file;
 	}
 	free(drives.drives);
 
 	return array;
 }
-
 
 
 static Date dateFromFiletime(FILETIME ft)
@@ -402,7 +417,7 @@ void freeFileArray(FileArray* fileArray)
 
 static int cmpFilesName(const wchar_t* a, const wchar_t* b)
 {
-	return wcscmp(a, b);
+	return lstrcmpiW(a, b);
 }
 
 static int cmpFilesSize(size_t a, size_t b)
@@ -581,8 +596,10 @@ static int cmpFilesTypeInvTop(File const* a, File const* b)
 }
 
 
-void sortFileArray(FileArray fileArray, int option)
+void sortFileArray(FileArray* fileArray, int option)
 {
+	if (!fileArray->files) return;
+
 	int (*cmpFnc)(void const*, void const*) = NULL;
 	switch (option)
 	{
@@ -599,8 +616,78 @@ void sortFileArray(FileArray fileArray, int option)
 	}
 
 	if (cmpFnc)
-		qsort(fileArray.files, fileArray.count, sizeof(File), cmpFnc);
+		qsort(fileArray->files, fileArray->count, sizeof(File), cmpFnc);
 }
+
+
+static int cmpDrivesNameTop(Drive const* a, Drive const* b)
+{
+	int ret = -cmpFilesName(a->name, b->name);
+	if (ret) return ret;
+
+	return -cmpFilesName(a->path, b->path);
+}
+
+static int cmpDrivesNameInvTop(Drive const* a, Drive const* b)
+{
+	int ret = cmpFilesName(a->name, b->name);
+	if (ret) return ret;
+
+	return -cmpFilesName(a->path, b->path);
+}
+
+static int cmpDrivesSizeTop(Drive const* a, Drive const* b)
+{
+	int ret = -cmpFilesSize(a->free, b->free);
+	if (ret) return ret;
+
+	ret = -cmpFilesName(a->name, b->name);
+	if (ret) return ret;
+
+	return -cmpFilesName(a->path, b->path);
+}
+
+static int cmpDrivesSizeInvTop(Drive const* a, Drive const* b)
+{
+	int ret = cmpFilesSize(a->free, b->free);
+	if (ret) return ret;
+
+	ret = -cmpFilesName(a->name, b->name);
+	if (ret) return ret;
+
+	return -cmpFilesName(a->path, b->path);
+}
+
+static int cmpDrivesPathTop(Drive const* a, Drive const* b)
+{
+	return -cmpFilesName(a->path, b->path);
+}
+
+static int cmpDrivesPathInvTop(Drive const* a, Drive const* b)
+{
+	return cmpFilesName(a->path, b->path);
+}
+
+void sortDriveArray(DriveArray* driveArray, int option)
+{
+	if (!driveArray->drives) return;
+
+	int (*cmpFnc)(void const*, void const*) = NULL;
+	switch (option)
+	{
+	case SORT_NAME: cmpFnc = cmpDrivesNameTop; break;
+	case SORT_NAME_INV: cmpFnc = cmpDrivesNameInvTop; break;
+	case SORT_SIZE: cmpFnc = cmpDrivesSizeTop; break;
+	case SORT_SIZE_INV: cmpFnc = cmpDrivesSizeInvTop; break;
+	case SORT_PATH: cmpFnc = cmpDrivesPathTop; break;
+	case SORT_PATH_INV: cmpFnc = cmpDrivesPathInvTop; break;
+	}
+
+	if (cmpFnc)
+		qsort(driveArray->drives, driveArray->count, sizeof(Drive), cmpFnc);
+}
+
+
 
 wchar_t* moveDirUp(wchar_t* dir, bool* error)
 {
