@@ -9,7 +9,7 @@ static void initCurrentDir(wchar_t** currentDir)
 	wchar_t** args = CommandLineToArgvW(GetCommandLineW(), &numArgs);
 	if (numArgs > 1) // Only need 1 extra optional for starting dir
 	{
-		size_t pathLen = lstrlenW(args[1]);
+		size_t pathLen = wcslen(args[1]);
 		dir = malloc(sizeof(wchar_t) * (pathLen + 1 + 4));
 		if (!dir)
 			return;
@@ -53,7 +53,7 @@ static void enableVT()
 	
 	fputs("\x1B[? 1 0 4 9 h", stdout); // new screen buffer
 
-	fputs("\x1B]0;FiBr File Browser 0.1.3\x07", stdout);
+	fputs("\x1B]0;FiBr File Browser 0.1.4\x07", stdout);
 }
 
 static void resetTerminal()
@@ -97,7 +97,7 @@ static void printFileArray(FileArray fileArray, int highlight, int start, int en
 				fputs("| ", stdout);
 			}
 
-			if (lstrlenW(file.name) > maxNameLen)
+			if (wcslen(file.name) > maxNameLen)
 				wprintf(L"%-*.*s...| ", maxNameLen - 3, maxNameLen - 3, file.name);
 			else
 				wprintf(L"%-*.*s| ", maxNameLen, maxNameLen, file.name);
@@ -115,7 +115,7 @@ static void printFileArray(FileArray fileArray, int highlight, int start, int en
 		{
 			fputs("\x1B[36m", stdout); // set fg color to blue (dark cyan)
 			fputs("> ", stdout);
-			if (lstrlenW(file.name) > maxNameLen)
+			if (wcslen(file.name) > maxNameLen)
 				wprintf(L"%-*.*s...| ", maxNameLen - 3, maxNameLen - 3, file.name);
 			else
 				wprintf(L"%-*.*s| ", maxNameLen, maxNameLen, file.name);
@@ -172,7 +172,7 @@ static void dirStackPush(DirStack* stack, const wchar_t* dir)
 		return;
 	}
 
-	size_t len = lstrlenW(dir);
+	size_t len = wcslen(dir);
 	wchar_t* add = malloc(sizeof(wchar_t) * (len + 1));
 	if (add)
 	{
@@ -205,7 +205,7 @@ static void dirStackInit(DirStack* stack, const wchar_t* path)
 	stack->data = NULL;
 	stack->size = 0;
 
-	size_t len = lstrlenW(path);
+	size_t len = wcslen(path);
 	wchar_t* dupPath = malloc(sizeof(wchar_t) * (len + 2));
 	if (dupPath)
 	{
@@ -291,7 +291,10 @@ int main()
 			highlight = 0;
 
 			freeFileArray(&fileArray);
-			fileArray = getFilesInDir(currentDir, loadSubdirs);
+			if (wcslen(currentDir) > 4)
+				fileArray = getFilesInDir(currentDir, loadSubdirs);
+			else
+				fileArray = getDrivesAsFileArray();
 
 			resort = false;
 			reprint = true;
@@ -301,7 +304,7 @@ int main()
 			{
 				for (int i = 0; i < fileArray.count; ++i)
 				{
-					if (lstrcmpW(fileArray.files[i].name, retDir) == 0)
+					if (wcscmp(fileArray.files[i].name, retDir) == 0)
 					{
 						highlight = (int)fileArray.count - 1 - i;
 						break;
@@ -325,7 +328,7 @@ int main()
 			fputs("\x1B[?25l", stdout); // hides cursor
 			fputs("\x1B[;H", stdout); // reset cursor
 			fputs("\x1B[95m", stdout); // set fg color to magenta
-			size_t pathLen = lstrlenW(currentDir + 4);
+			size_t pathLen = wcslen(currentDir + 4);
 			if (pathLen >= consoleW)
 				wprintf(L"%s", currentDir + 4 + (pathLen - consoleW + 1));
 			else
@@ -414,12 +417,7 @@ int main()
 				bool error = false;
 				currentDir = moveDirUp(currentDir, &error);
 				if (error)
-				{
-					// remove later
 					dirChanged = false;
-
-					// go to disk view
-				}
 
 				retDir = dirStackPop(&dirStack);
 			}

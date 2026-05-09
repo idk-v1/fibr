@@ -59,3 +59,16 @@ void sortFileArray(FileArray fileArray, int option);
 
 wchar_t* moveDirUp(wchar_t* dir, bool* error);
 wchar_t* moveDirDown(wchar_t* dir, const wchar_t* subdir, bool* error);
+
+
+typedef struct DriveArray
+{
+	wchar_t** drives; // attempts to use drive letter path, else uses long path
+	size_t count;
+} DriveArray;
+
+DriveArray getDrives();
+
+void freeDriveArray(DriveArray* array);
+
+FileArray getDrivesAsFileArray();

@@ -2,6 +2,138 @@
 
 #include <Windows.h>
 
+
+DriveArray getDrives()
+{
+	wchar_t buf[MAX_PATH] = { 0 };
+	DWORD bufsize = MAX_PATH;
+
+	HANDLE hVol = FindFirstVolumeW(buf, bufsize);
+	if (hVol == INVALID_HANDLE_VALUE)
+		return (DriveArray){0};
+	
+	DWORD available = GetLogicalDrives();
+	size_t bitcount = 0;
+	for (size_t i = 0; i < 32; ++i)
+	{
+		bitcount += (available & 1);
+		available >>= 1;
+	}
+
+	DriveArray array = { 0 };
+	// for more that 26, unknown number, just double
+	size_t cap = bitcount;
+	array.drives = malloc(sizeof(wchar_t*) * cap);
+	if (!array.drives)
+	{
+		FindVolumeClose(hVol);
+		return (DriveArray){0};
+	}
+
+	while (true)
+	{
+		wchar_t devName[MAX_PATH] = {0};
+
+		// Hidden partitions, hopefully consistantly named
+		// Need to ignore bc can't even access them
+		GetVolumeInformationW(buf, devName, MAX_PATH, NULL, NULL, NULL, NULL, 0);
+		if (wcscmp(devName, L"WINRE_DRV") != 0 && wcscmp(devName, L"SYSTEM_DRV") != 0)
+		{
+			if (array.count + 1 > cap)
+			{
+				cap *= 2;
+				wchar_t** temp = realloc(array.drives, sizeof(wchar_t*) * cap);
+				if (temp)
+					array.drives = temp;
+				else
+				{
+					// return what we have
+					FindVolumeClose(hVol);
+					return array;
+				}
+			}
+
+			wchar_t* drive = NULL;
+			DWORD volNameSize = 0;
+			GetVolumePathNamesForVolumeNameW(buf, devName, MAX_PATH, &volNameSize);
+			if (volNameSize > 1)
+			{
+				size_t len = volNameSize - 2;
+				drive = malloc(sizeof(wchar_t) * (len + 1));
+				if (!drive)
+				{
+					// return what we have
+					FindVolumeClose(hVol);
+					return array;
+				}
+				memcpy(drive, devName, sizeof(wchar_t) * len);
+				drive[len - 1] = 0;
+			}
+			else // no drive letter
+			{
+				size_t len = wcslen(buf);
+				drive = malloc(sizeof(wchar_t) * len);
+				if (!drive)
+				{
+					// return what we have
+					FindVolumeClose(hVol);
+					return array;
+				}
+				memcpy(drive, devName, sizeof(wchar_t) * len);
+				drive[len - 1] = 0;
+			}
+			array.drives[array.count] = drive;
+			++array.count;
+		}
+
+		if (!FindNextVolumeW(hVol, buf, bufsize))
+			break;
+	}
+
+	FindVolumeClose(hVol);
+	return array;
+}
+
+void freeDriveArray(DriveArray* array)
+{
+	if (array)
+	{
+		if (array->drives)
+		{
+			for (size_t i = 0; i < array->count; ++i)
+				free(array->drives[i]);
+			free(array->drives);
+			array->drives = NULL;
+		}
+	}
+}
+
+FileArray getDrivesAsFileArray()
+{
+	DriveArray drives = getDrives();
+
+	FileArray array = { 0 };
+	array.count = drives.count;
+	array.files = malloc(sizeof(File) * array.count);
+	if (!array.files)
+	{
+		freeDriveArray(&drives);
+		return (FileArray){0};
+	}
+
+	for (size_t i = 0; i < array.count; ++i)
+	{
+		File file = { 0 };
+		file.name = drives.drives[i]; // just steal the child and kill the parent
+		array.files[i] = file;
+	}
+	free(drives.drives);
+
+	return array;
+}
+
+
+
 static Date dateFromFiletime(FILETIME ft)
 {
 	Date date = { 0 };
@@ -30,10 +162,12 @@ static bool isArchive(const wchar_t* name)
 		L"zip",
 		L"7z",
 		L"tar",
-		L"gz"
+		L"gz",
+		L"xz",
+		L"asc"
 	};
 
-	size_t len = lstrlenW(name);
+	int len = (int)wcslen(name);
 	int extPos = -1;
 	for (int i = len - 1; i >= 0; --i)
 	{
@@ -46,7 +180,7 @@ static bool isArchive(const wchar_t* name)
 	if (extPos == -1)
 		return false;
 
-	for (size_t i = 0; i < 4; ++i)
+	for (size_t i = 0; i < sizeof(exts) / sizeof(wchar_t*); ++i)
 	{
 		if (lstrcmpiW(name + extPos, exts[i]) == 0)
 			return true;
@@ -61,7 +195,7 @@ FileArray getFilesInDir(const wchar_t* path, bool subdirCount)
 	if (!path)
 		return (FileArray){0};
 
-	size_t pathLen = lstrlenW(path);
+	size_t pathLen = wcslen(path);
 	if (pathLen == 0)
 		return (FileArray){0};
 
@@ -106,9 +240,9 @@ FileArray getFilesInDir(const wchar_t* path, bool subdirCount)
 
 
 	FileArray array = { 0 };
-	size_t count = getFileCountInDir(path);
+	size_t cap = 16;
 
-	array.files = malloc(sizeof(File) * count);
+	array.files = malloc(sizeof(File) * cap);
 	if (!array.files)
 	{
 		FindClose(hFind);
@@ -118,11 +252,10 @@ FileArray getFilesInDir(const wchar_t* path, bool subdirCount)
 
 	while (FindNextFileW(hFind, &findData))
 	{
-		// maybe some file is added in an inconvientient time
-		if (array.count + 1 > count)
+		if (array.count + 1 > cap)
 		{
-			count += 5;
-			File* temp = realloc(array.files, sizeof(File) * count);
+			cap *= 2;
+			File* temp = realloc(array.files, sizeof(File) * cap);
 			if (temp)
 				array.files = temp;
 			else break; // be happy with what we've got
@@ -131,7 +264,7 @@ FileArray getFilesInDir(const wchar_t* path, bool subdirCount)
 		File file = { 0 };
 		file.isFile = (findData.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) == 0;
 
-		size_t nameLen = lstrlenW(findData.cFileName);
+		size_t nameLen = wcslen(findData.cFileName);
 		size_t filenameStart = 0;
 		for (size_t i = nameLen - 1; i > 0; --i)
 			if (findData.cFileName[i] == L'\\')
@@ -180,7 +313,7 @@ size_t getFileCountInDir(const wchar_t* path)
 	if (!path)
 		return 0;
 
-	size_t pathLen = lstrlenW(path);
+	size_t pathLen = wcslen(path);
 	if (pathLen == 0)
 		return 0;
 
@@ -214,13 +347,11 @@ size_t getFileCountInDir(const wchar_t* path)
 	WIN32_FIND_DATAW findData = { 0 };
 	HANDLE hFind = FindFirstFileExW(wildPath, FindExInfoBasic, &findData,
 		FindExSearchNameMatch, NULL, FIND_FIRST_EX_LARGE_FETCH);
-	if (hFind == INVALID_HANDLE_VALUE)
-	{
-		free(wildPath);
-		return 0;
-	}
 	free(wildPath);
-	// the fake directories "." and ".." always appear first
+	if (hFind == INVALID_HANDLE_VALUE)
+		return 0;
+
+	// the fake directories "." and ".." always appear first, skip
 	FindNextFileW(hFind, &findData);
 
 
@@ -239,8 +370,8 @@ wchar_t* strSubdir(const wchar_t* dir, const wchar_t* sub)
 	if (!dir || !sub)
 		return NULL;
 
-	size_t dirLen = lstrlenW(dir);
-	size_t subLen = lstrlenW(sub);
+	size_t dirLen = wcslen(dir);
+	size_t subLen = wcslen(sub);
 
 	wchar_t* newdir = malloc(sizeof(wchar_t) * (dirLen + subLen + 2));
 	if (!newdir)
@@ -271,7 +402,7 @@ void freeFileArray(FileArray* fileArray)
 
 static int cmpFilesName(const wchar_t* a, const wchar_t* b)
 {
-	return lstrcmpW(a, b);
+	return wcscmp(a, b);
 }
 
 static int cmpFilesSize(size_t a, size_t b)
@@ -296,8 +427,8 @@ static int cmpFilesDate(Date a, Date b)
 
 static int cmpFilesType(const wchar_t* a, const wchar_t* b)
 {
-	size_t aLen = lstrlenW(a);
-	size_t bLen = lstrlenW(b);
+	size_t aLen = wcslen(a);
+	size_t bLen = wcslen(b);
 
 	size_t aExt = aLen - 1;
 	size_t bExt = bLen - 1;
@@ -476,23 +607,26 @@ wchar_t* moveDirUp(wchar_t* dir, bool* error)
 	*error = false;
 	if (!dir)
 		return NULL;
-	size_t len = lstrlenW(dir);
+	size_t len = wcslen(dir);
 
 	size_t pos = len - 1;
 
-	for (size_t i = len - 1; i >= 4; --i)
+	for (size_t i = len - 1; i > 0; --i)
 		if (dir[i] == L'\\')
 		{
 			pos = i;
 			break;
 		}
 
-	if (pos + 1 == len)
+	if (pos == 0)
 	{
 		*error = true;
 		return dir;
 	}
-	dir[pos] = 0;
+	if (pos == 3)
+		dir[4] = 0;
+	else
+		dir[pos] = 0;
 	return dir;
 }
 
@@ -507,7 +641,12 @@ wchar_t* moveDirDown(wchar_t* dir, const wchar_t* subdir, bool* error)
 		return dir;
 	}
 
+	size_t dirLen = wcslen(dir);
+	if (wcslen(dir) == 4)
+		dir[dirLen - 1] = 0;
+	
 	wchar_t* newDir = strSubdir(dir, subdir);
+
 	free(dir);
 	return newDir;
 }
