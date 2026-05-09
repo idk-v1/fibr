@@ -3,6 +3,25 @@
 #include <Windows.h>
 
 
+static bool shouldHideDrive(const wchar_t* name)
+{
+	const wchar_t* names[] =
+	{
+		L"WINRE_DRV",
+		L"SYSTEM_DRV"
+	};
+
+	int len = (int)wcslen(name);
+
+	for (size_t i = 0; i < sizeof(names) / sizeof(wchar_t*); ++i)
+	{
+		if (lstrcmpiW(name, names[i]) == 0)
+			return true;
+	}
+
+	return false;
+}
+
 DriveArray getDrives()
 {
 	wchar_t buf[MAX_PATH] = { 0 };
@@ -37,7 +56,7 @@ DriveArray getDrives()
 		// Hidden partitions, hopefully consistantly named
 		// Need to ignore bc can't even access them
 		GetVolumeInformationW(buf, devName, MAX_PATH, NULL, NULL, NULL, NULL, 0);
-		if (wcscmp(devName, L"WINRE_DRV") != 0 && wcscmp(devName, L"SYSTEM_DRV") != 0)
+		if (!shouldHideDrive(devName))
 		{
 			if (array.count + 1 > cap)
 			{
