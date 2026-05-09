@@ -421,6 +421,11 @@ int main()
 
 			resort = false;
 			reprint = true;
+
+			if (isFileArray)
+				maxNameLen = consoleW - 51;
+			else
+				maxNameLen = consoleW - 28;
 		}
 		if (resort)
 		{
