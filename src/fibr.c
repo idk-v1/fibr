@@ -53,7 +53,7 @@ static void enableVT()
 	
 	fputs("\x1B[? 1 0 4 9 h", stdout); // new screen buffer
 
-	fputs("\x1B]0;FiBr File Browser 0.1.5\x07", stdout);
+	fputs("\x1B]0;FiBr File Browser 0.1.6\x07", stdout);
 }
 
 static void resetTerminal()
