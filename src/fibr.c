@@ -74,6 +74,87 @@ static void resetTerminal()
 	FlushConsoleInputBuffer(hConsole);
 }
 
+
+
+static void rainbowPrintPath(const wchar_t* path, int consoleW)
+{
+	size_t len = wcslen(path);
+
+	size_t sepCount = 0;
+	size_t start = 0;
+
+	fputs("\x1B[40m", stdout); // bg black
+
+	if (len >= consoleW)
+	{
+		start = len - consoleW + 1 + 3;
+		for (size_t i = 0; i < start; ++i)
+			if (path[i] == L'\\')
+				++sepCount;
+
+		fputs("\x1B[97m...", stdout); // fg bright white
+	}
+
+	switch (sepCount % 12)
+	{
+	case 0:	fputs("\x1B[31m", stdout); break; // fg red
+	case 1:	fputs("\x1B[91m", stdout); break; // fg bright red
+	case 2:	fputs("\x1B[33m", stdout); break; // fg yellow
+	case 3:	fputs("\x1B[93m", stdout); break; // fg bright yellow
+	case 4:	fputs("\x1B[92m", stdout); break; // fg bright green
+	case 5:	fputs("\x1B[32m", stdout); break; // fg green
+	case 6:	fputs("\x1B[96m", stdout); break; // fg bright cyan
+	case 7:	fputs("\x1B[36m", stdout); break; // fg cyan
+	case 8:	fputs("\x1B[94m", stdout); break; // fg bright blue
+	case 9:	fputs("\x1B[34m", stdout); break; // fg blue
+	case 10:fputs("\x1B[35m", stdout); break; // fg magenta
+	case 11:fputs("\x1B[95m", stdout); break; // fg bright magenta
+	}
+	for (size_t i = start; i < len; ++i)
+	{
+		if (path[i] == L'\\')
+		{
+			++sepCount;
+			fputs("\x1B[97m\\", stdout); // fg bright white
+			switch (sepCount % 12)
+			{
+			case 0:	fputs("\x1B[31m", stdout); break; // fg red
+			case 1:	fputs("\x1B[91m", stdout); break; // fg bright red
+			case 2:	fputs("\x1B[33m", stdout); break; // fg yellow
+			case 3:	fputs("\x1B[93m", stdout); break; // fg bright yellow
+			case 4:	fputs("\x1B[92m", stdout); break; // fg bright green
+			case 5:	fputs("\x1B[32m", stdout); break; // fg green
+			case 6:	fputs("\x1B[96m", stdout); break; // fg bright cyan
+			case 7:	fputs("\x1B[36m", stdout); break; // fg cyan
+			case 8:	fputs("\x1B[94m", stdout); break; // fg bright blue
+			case 9:	fputs("\x1B[34m", stdout); break; // fg blue
+			case 10:fputs("\x1B[35m", stdout); break; // fg magenta
+			case 11:fputs("\x1B[95m", stdout); break; // fg bright magenta
+			}
+		}
+		else
+		{
+			putwchar(path[i]);
+		}
+	}
+}
+
+static void printFileName(const wchar_t* file, int maxNameLen)
+{
+	size_t len = wcslen(file);
+
+	if (len >= maxNameLen)
+	{
+		// Try to always print extension
+	}
+	else // Normal
+	{
+
+	}
+}
+
+
+
 static void printFileArray(FileArray fileArray, int highlight, int start, int end, int maxNameLen)
 {
 	for (size_t i = start; i < end; ++i)
@@ -213,6 +294,83 @@ static bool getConsoleSize(int* w, int* h)
 }
 
 
+static void display(FileArray* fileArray, DriveArray* driveArray, bool isFileArray, 
+	int sortMethod, const wchar_t* currentDir, int highlight, int consoleW, int consoleH)
+{
+	int maxNameLen;
+	size_t dataCount;
+
+	if (isFileArray)
+	{
+		maxNameLen = consoleW - 51;
+		dataCount = fileArray->count;
+	}
+	else
+	{
+		maxNameLen = consoleW - 28;
+		dataCount = driveArray->count;
+	}
+
+
+	int start = highlight - (consoleH - 2) / 2;
+	int end = highlight + ((consoleH - 2) - (consoleH - 2) / 2);
+	if (start < 0)
+	{
+		end -= start + 1;
+		start = 0;
+	}
+	if (end > dataCount)
+		end = (int)dataCount;
+	if (end - start > consoleH - 3)
+		end = consoleH - 3 + start;
+
+	fputs("\x1B[3;r", stdout); // set scroll region
+	fputs("\x1B[?25l", stdout); // hides cursor
+	fputs("\x1B[;H", stdout); // reset cursor
+
+	size_t pathLen = wcslen(currentDir + 4);
+	if (isFileArray)
+	{
+		rainbowPrintPath(currentDir + 4, consoleW);
+
+		fputs("\x1B[40m\x1B[95m", stdout); // fg magenta, bg black
+		fputs("\x1B[0K\n", stdout); // clear line after cursor
+
+		printf("| %-*s%c%c| Size  %c| Create          %c| Write           %c|", maxNameLen - 2, "Name",
+			(sortMethod == SORT_TYPE || sortMethod == SORT_TYPE_INV ? 't' : ' '),
+			(sortMethod == SORT_NAME || sortMethod == SORT_TYPE ? '^' : (sortMethod == SORT_NAME_INV || sortMethod == SORT_TYPE_INV ? 'v' : ' ')),
+			(sortMethod == SORT_SIZE ? '^' : (sortMethod == SORT_SIZE_INV ? 'v' : ' ')),
+			(sortMethod == SORT_CREATE ? '^' : (sortMethod == SORT_CREATE_INV ? 'v' : ' ')),
+			(sortMethod == SORT_WRITE ? '^' : (sortMethod == SORT_WRITE_INV ? 'v' : ' '))
+		);
+	}
+	else
+	{
+		fputs("\x1B[40m\x1B[95m", stdout); // fg magenta, bg black
+		wprintf(L"Drives");
+
+		fputs("\x1B[0K\n", stdout); // clear line after cursor
+
+		printf("| %-*s%c%c| Size                 %c|", maxNameLen - 2, "Name",
+			(sortMethod == SORT_PATH || sortMethod == SORT_PATH_INV ? 'p' : ' '),
+			(sortMethod == SORT_NAME || sortMethod == SORT_PATH ? '^' : (sortMethod == SORT_NAME_INV || sortMethod == SORT_PATH_INV ? 'v' : ' ')),
+			(sortMethod == SORT_SIZE ? '^' : (sortMethod == SORT_SIZE_INV ? 'v' : ' '))
+		);
+	}
+
+	fputs("\x1B[0K\n", stdout); // clear line after cursor
+
+	if (isFileArray)
+		printFileArray(*fileArray, highlight, start, end, maxNameLen);
+	else
+		printDriveArray(*driveArray, highlight, start, end, maxNameLen);
+
+	fputs("\x1B[40m", stdout); // set bg color to black
+	fputs("\x1B[0J", stdout); // clear screen after cursor
+}
+
+
+
 typedef struct DirStack
 {
 	wchar_t** data;
@@ -337,8 +495,6 @@ int main()
 
 	int sortMethod = SORT_NAME;
 
-	int maxNameLen = 0;
-
 	bool running = true;
 	while (running)
 	{
@@ -346,10 +502,6 @@ int main()
 		if (getConsoleSize(&consoleW, &consoleH))
 		{
 			reprint = true;
-			if (isFileArray)
-				maxNameLen = consoleW - 51;
-			else
-				maxNameLen = consoleW - 28;
 		}
 
 		if (dirChanged)
@@ -416,16 +568,10 @@ int main()
 					retDir = NULL;
 				}
 
-				// impl sort later
 			}
 
 			resort = false;
 			reprint = true;
-
-			if (isFileArray)
-				maxNameLen = consoleW - 51;
-			else
-				maxNameLen = consoleW - 28;
 		}
 		if (resort)
 		{
@@ -440,65 +586,7 @@ int main()
 		if (reprint)
 		{
 			reprint = false;
-			fputs("\x1B[3;r", stdout); // set scroll region
-			fputs("\x1B[?25l", stdout); // hides cursor
-			fputs("\x1B[;H", stdout); // reset cursor
-			fputs("\x1B[95m", stdout); // set fg color to magenta
-			size_t pathLen = wcslen(currentDir);
-			if (isFileArray)
-			{
-				if (pathLen - 4 >= consoleW)
-					wprintf(L"%s", currentDir + 4 + (pathLen - 4 - consoleW + 1));
-				else
-					wprintf(L"%s", currentDir + 4);
-
-				fputs("\x1B[0K\n", stdout); // clear line after cursor
-
-				printf("| %-*s%c%c| Size  %c| Create          %c| Write           %c|", maxNameLen - 2, "Name",
-					(sortMethod == SORT_TYPE || sortMethod == SORT_TYPE_INV ? 't' : ' '),
-					(sortMethod == SORT_NAME || sortMethod == SORT_TYPE ? '^' : (sortMethod == SORT_NAME_INV || sortMethod == SORT_TYPE_INV ? 'v' : ' ')),
-					(sortMethod == SORT_SIZE ? '^' : (sortMethod == SORT_SIZE_INV ? 'v' : ' ')),
-					(sortMethod == SORT_CREATE ? '^' : (sortMethod == SORT_CREATE_INV ? 'v' : ' ')),
-					(sortMethod == SORT_WRITE ? '^' : (sortMethod == SORT_WRITE_INV ? 'v' : ' '))
-				);
-			}
-			else
-			{
-				wprintf(L"Drives");
-
-				fputs("\x1B[0K\n", stdout); // clear line after cursor
-
-				printf("| %-*s%c%c| Size                 %c|", maxNameLen - 2, "Name",
-					(sortMethod == SORT_PATH || sortMethod == SORT_PATH_INV ? 'p' : ' '),
-					(sortMethod == SORT_NAME || sortMethod == SORT_PATH ? '^' : (sortMethod == SORT_NAME_INV || sortMethod == SORT_PATH_INV ? 'v' : ' ')),
-					(sortMethod == SORT_SIZE ? '^' : (sortMethod == SORT_SIZE_INV ? 'v' : ' '))
-				);
-			}
-
-			fputs("\x1B[0K\n", stdout); // clear line after cursor
-
-
-			int start = highlight - (consoleH - 2) / 2;
-			int end = highlight + ((consoleH - 2) - (consoleH - 2) / 2);
-			if (start < 0)
-			{
-				end -= start + 1;
-				start = 0;
-			}
-			if (end > dataCount)
-				end = (int)dataCount;
-			if (end - start > consoleH - 3)
-				end = consoleH - 3 + start;
-			
-
-			if (isFileArray)
-				printFileArray(fileArray, highlight, start, end, maxNameLen);
-			else
-				printDriveArray(driveArray, highlight, start, end, maxNameLen);
-
-			fputs("\x1B[40m", stdout); // set bg color to black
-			fputs("\x1B[0J", stdout); // clear screen after cursor
-
+			display(&fileArray, &driveArray, isFileArray, sortMethod, currentDir, highlight, consoleW, consoleH);
 		}
 
 		if (consoleWnd == GetForegroundWindow())
@@ -508,8 +596,6 @@ int main()
 			bool keyup = GetKeyState(VK_UP) & 0x8000;
 			bool keyright = GetKeyState(VK_RIGHT) & 0x8000;
 			bool keyleft = GetKeyState(VK_LEFT) & 0x8000;
-
-			loadSubdirs = !ctrl;
 
 			if (GetKeyState(VK_ESCAPE) & 0x8000)
 				running = false;
@@ -539,6 +625,7 @@ int main()
 			}
 			if (keyright && !rightLast)
 			{
+				loadSubdirs = !ctrl;
 				if (isFileArray)
 				{
 					if (fileArray.count && !fileArray.files[fileArray.count - 1 - highlight].isFile)
@@ -562,6 +649,7 @@ int main()
 			}
 			if (keyleft && !leftLast)
 			{
+				loadSubdirs = !ctrl;
 				dirChanged = true;
 
 				bool error = false;
