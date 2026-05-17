@@ -93,7 +93,7 @@ DriveArray getDrives()
 			const wchar_t* path = NULL;
 			if (volNameSize > 1)
 			{
-				len = volNameSize - 2; // size includes NULL and trailing slash
+				len = (size_t)volNameSize - 2; // size includes NULL and trailing slash
 				path = devName;
 			}
 			else // no drive letter

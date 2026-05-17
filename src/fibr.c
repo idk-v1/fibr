@@ -2,6 +2,24 @@
 
 #include <Windows.h>
 
+#define SETFGCOLOR(r, g, b) fputs("\x1B[38;2;"#r";"#g";"#b"", stdout)
+#define SETBGCOLOR(r, g, b) fputs("\x1B[48;2;"#r";"#g";"#b"", stdout)
+
+#define CLEARLN fputs("\x1B[0K", stdout); // clear line after cursor
+#define CLEARSCR fputs("\x1B[0J", stdout); // clear screen after cursor
+
+#define SETWINDOWTITLE(title) fputs("\x1B]0;"#title"\x07", stdout)
+
+#define NEWSCREENBUF fputs("\x1B[? 1 0 4 9 h", stdout);
+#define MAINSCREENBUF fputs("\x1B[? 1 0 4 9 l", stdout);
+#define RESET fputs("\x1B[!p", stdout);
+
+#define SETSCROLL(line) fputs("\x1B["#line";r", stdout); // set scroll region
+#define HIDECURSOR fputs("\x1B[?25l", stdout); // hides cursor
+#define SHOWCURSOR fputs("\x1B[?25h", stdout); // hides cursor
+#define RESETCURSOR fputs("\x1B[;H", stdout); // reset cursor
+
+
 static void initCurrentDir(wchar_t** currentDir)
 {
 	wchar_t* dir = NULL;
@@ -53,7 +71,7 @@ static void enableVT()
 	
 	fputs("\x1B[? 1 0 4 9 h", stdout); // new screen buffer
 
-	fputs("\x1B]0;FiBr File Browser 0.1.6\x07", stdout);
+	fputs("\x1B]0;FiBr File Browser 0.1.7\x07", stdout);
 }
 
 static void resetTerminal()
@@ -81,7 +99,7 @@ static void rainbowPrintPath(const wchar_t* path, int consoleW)
 	size_t len = wcslen(path);
 
 	size_t sepCount = 0;
-	size_t start = 0;
+	int start = 0;
 
 	fputs("\x1B[40m", stdout); // bg black
 
@@ -139,17 +157,78 @@ static void rainbowPrintPath(const wchar_t* path, int consoleW)
 	}
 }
 
-static void printFileName(const wchar_t* file, int maxNameLen)
+static void printFileName(const wchar_t* file, size_t maxNameLen)
 {
+	if ((long long)maxNameLen < 0)
+		maxNameLen = 0;
+
 	size_t len = wcslen(file);
 
-	if (len >= maxNameLen)
+	size_t extPos = -1;
+	for (int i = len - 1; i >= 0; --i)
+		if (file[i] == L'.')
+		{
+			extPos = i;
+			break;
+		}
+
+	if (len > maxNameLen)
 	{
-		// Try to always print extension
+		size_t maxNameLenExt = (maxNameLen >= 3 ? maxNameLen - 3 : 0);
+		if (extPos != -1) // Has extension
+		{
+			// Try to always print extension
+			size_t extLen = len - extPos;
+			if (extLen > maxNameLen) // This is a waste of time, unusable
+			{
+				fputs("\x1B[38;2;255;0;150m", stdout); // set fg color to hot pink
+				for (int i = extPos; i < maxNameLenExt; ++i)
+					putwchar(file[i]);
+				putwchar(L'.');
+				putwchar(L'.');
+				putwchar(L'.');
+			}
+			else // print "thing....ext"
+			{
+				for (int i = 0; i < (int)(maxNameLenExt - extLen); ++i)
+					putwchar(file[i]);
+				// bug "thing.txt" becomes "....txt" when not enough space
+				// but sometimes the "..." uses more space
+				// this only happens in an unusable amount of space, ignoring
+				putwchar(L'.');
+				putwchar(L'.');
+				putwchar(L'.');
+				fputs("\x1B[38;2;255;0;150m", stdout); // set fg color to hot pink
+				for (size_t i = extPos; i < len; ++i)
+					putwchar(file[i]);
+			}
+		}
+		else // No extension
+		{
+			for (size_t i = 0; i < maxNameLenExt; ++i)
+				putwchar(file[i]);
+			putwchar(L'.');
+			putwchar(L'.');
+			putwchar(L'.');
+		}
 	}
 	else // Normal
 	{
-
+		if (extPos != -1)
+		{
+			for (size_t i = 0; i < extPos; ++i)
+				putwchar(file[i]);
+			fputs("\x1B[38;2;255;0;150m", stdout); // set fg color to hot pink
+			for (size_t i = extPos; i < len; ++i)
+				putwchar(file[i]);
+		}
+		else
+		{
+			for (size_t i = 0; i < len; ++i)
+				putwchar(file[i]);
+		}
+		for (int i = len; i < maxNameLen; ++i)
+			putwchar(L' ');
 	}
 }
 
@@ -178,10 +257,16 @@ static void printFileArray(FileArray fileArray, int highlight, int start, int en
 				fputs("| ", stdout);
 			}
 
-			if (wcslen(file.name) > maxNameLen)
-				wprintf(L"%-*.*s...| ", maxNameLen - 3, maxNameLen - 3, file.name);
+			printFileName(file.name, maxNameLen);
+			//if (wcslen(file.name) > maxNameLen)
+			//	wprintf(L"%-*.*s...| ", maxNameLen - 3, maxNameLen - 3, file.name);
+			//else
+			//	wprintf(L"%-*.*s| ", maxNameLen, maxNameLen, file.name);
+
+			if (file.isArchive)
+				fputs("\x1B[96m", stdout); // set fg color to cyan
 			else
-				wprintf(L"%-*.*s| ", maxNameLen, maxNameLen, file.name);
+				fputs("\x1B[97m", stdout); // set fg color to white
 
 			int unit = 0;
 			size_t size = file.size;
@@ -190,7 +275,7 @@ static void printFileArray(FileArray fileArray, int highlight, int start, int en
 				++unit;
 				size /= 1000;
 			}
-			printf("%3llu %cB |", size, " KMGTPE"[unit]);
+			printf("| %3llu %cB |", size, " KMGTPE"[unit]);
 		}
 		else
 		{
