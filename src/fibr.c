@@ -2,22 +2,69 @@
 
 #include <Windows.h>
 
-#define SETFGCOLOR(r, g, b) fputs("\x1B[38;2;"#r";"#g";"#b"", stdout)
-#define SETBGCOLOR(r, g, b) fputs("\x1B[48;2;"#r";"#g";"#b"", stdout)
 
-#define CLEARLN fputs("\x1B[0K", stdout); // clear line after cursor
-#define CLEARSCR fputs("\x1B[0J", stdout); // clear screen after cursor
+#define EXTENSION_COLOR         255,  50, 150
+#define ARCHIVE_COLOR             0, 255, 255
+#define FILE_COLOR                0, 255, 191
+#define FOLDER_COLOR              0, 159, 255
+#define EMPTY_FOLDER_COLOR        0,  95, 191
+#define HIGHLIGHT_COLOR         100,   0, 100
+#define SORT_BAR_COLOR          255,   0, 150
+#define BG_COLOR                 20,   0,  30
+#define BG_ALT_COLOR             35,   0,  45
 
-#define SETWINDOWTITLE(title) fputs("\x1B]0;"#title"\x07", stdout)
 
-#define NEWSCREENBUF fputs("\x1B[? 1 0 4 9 h", stdout);
-#define MAINSCREENBUF fputs("\x1B[? 1 0 4 9 l", stdout);
-#define RESET fputs("\x1B[!p", stdout);
+static void printU8(int num)
+{
+	char buf[4] = { 0 };
+	buf[0] = '0' + num / 100;
+	buf[1] = '0' + num / 10 % 10;
+	buf[2] = '0' + num % 10;
+	fputs(buf, stdout);
+}
 
-#define SETSCROLL(line) fputs("\x1B["#line";r", stdout); // set scroll region
-#define HIDECURSOR fputs("\x1B[?25l", stdout); // hides cursor
-#define SHOWCURSOR fputs("\x1B[?25h", stdout); // hides cursor
-#define RESETCURSOR fputs("\x1B[;H", stdout); // reset cursor
+static void setFgColor(int r, int g, int b)
+{
+	fputs("\x1B[38;2;", stdout); 
+	printU8(r);
+	fputs(";", stdout); 
+	printU8(g);
+	fputs(";", stdout); 
+	printU8(b);
+	fputs("m", stdout); 
+}
+static void setBgColor(int r, int g, int b)
+{
+	fputs("\x1B[48;2;", stdout);
+	printU8(r);
+	fputs(";", stdout);
+	printU8(g);
+	fputs(";", stdout);
+	printU8(b);
+	fputs("m", stdout);
+}
+
+static void clearLn() { fputs("\x1B[0K", stdout); } // clear line after cursor
+static void clearScr() { fputs("\x1B[0J", stdout); } // clear screen after cursor
+
+static void setWindowTitle(const char* title) { 
+	fputs("\x1B]0;", stdout);
+	fputs(title, stdout);
+	fputs("\x07", stdout); 
+}
+
+static void newScreenBuf() { fputs("\x1B[? 1 0 4 9 h", stdout); }
+static void mainScreenBuf() { fputs("\x1B[? 1 0 4 9 l", stdout); }
+
+static void setScrollLines(int line) 
+{
+	fputs("\x1B[", stdout);
+	printU8(line);
+	fputs(";r", stdout);
+} // set scroll region
+static void hideCursor() { fputs("\x1B[?25l", stdout); } // hides cursor
+static void showCursor() { fputs("\x1B[?25h", stdout); } // hides cursor
+static void resetCursor() { fputs("\x1B[;H", stdout); } // reset cursor
 
 
 static void initCurrentDir(wchar_t** currentDir)
@@ -69,15 +116,14 @@ static void enableVT()
 	GetConsoleMode(hConsole, &mode);
 	SetConsoleMode(hConsole, mode | ENABLE_VIRTUAL_TERMINAL_INPUT);
 	
-	fputs("\x1B[? 1 0 4 9 h", stdout); // new screen buffer
-
-	fputs("\x1B]0;FiBr File Browser 0.1.7\x07", stdout);
+	newScreenBuf();
+	setWindowTitle("FiBr File Browser 0.1.8");
 }
 
 static void resetTerminal()
 {
-	fputs("\x1B[!p", stdout); // reset
-	fputs("\x1B[? 1 0 4 9 l", stdout); // main screen buffer
+	fputs("\x1B[!p", stdout);
+	mainScreenBuf();
 
 	HANDLE hConsole = GetStdHandle(STD_OUTPUT_HANDLE);
 	DWORD mode = 0;
@@ -101,53 +147,55 @@ static void rainbowPrintPath(const wchar_t* path, int consoleW)
 	size_t sepCount = 0;
 	int start = 0;
 
-	fputs("\x1B[40m", stdout); // bg black
+	setBgColor(BG_COLOR);
 
 	if (len >= consoleW)
 	{
-		start = len - consoleW + 1 + 3;
+		start = (int)len - consoleW + 1 + 3;
 		for (size_t i = 0; i < start; ++i)
 			if (path[i] == L'\\')
 				++sepCount;
 
-		fputs("\x1B[97m...", stdout); // fg bright white
+		setFgColor(255, 255, 255);
 	}
 
 	switch (sepCount % 12)
 	{
-	case 0:	fputs("\x1B[31m", stdout); break; // fg red
-	case 1:	fputs("\x1B[91m", stdout); break; // fg bright red
-	case 2:	fputs("\x1B[33m", stdout); break; // fg yellow
-	case 3:	fputs("\x1B[93m", stdout); break; // fg bright yellow
-	case 4:	fputs("\x1B[92m", stdout); break; // fg bright green
-	case 5:	fputs("\x1B[32m", stdout); break; // fg green
-	case 6:	fputs("\x1B[96m", stdout); break; // fg bright cyan
-	case 7:	fputs("\x1B[36m", stdout); break; // fg cyan
-	case 8:	fputs("\x1B[94m", stdout); break; // fg bright blue
-	case 9:	fputs("\x1B[34m", stdout); break; // fg blue
-	case 10:fputs("\x1B[35m", stdout); break; // fg magenta
-	case 11:fputs("\x1B[95m", stdout); break; // fg bright magenta
+	case 0: setFgColor(255, 0, 0); break;
+	case 1: setFgColor(255, 127, 0); break;
+	case 2: setFgColor(255, 255, 0); break;
+	case 3: setFgColor(127, 255, 0); break;
+	case 4: setFgColor(0, 255, 0); break;
+	case 5: setFgColor(0, 255, 127); break;
+	case 6: setFgColor(0, 255, 255); break;
+	case 7: setFgColor(0, 127, 255); break;
+	case 8: setFgColor(0, 0, 255); break;
+	case 9: setFgColor(127, 0, 255); break;
+	case 10:setFgColor(255, 0, 255); break;
+	case 11:setFgColor(255, 0, 127); break;
 	}
 	for (size_t i = start; i < len; ++i)
 	{
 		if (path[i] == L'\\')
 		{
 			++sepCount;
-			fputs("\x1B[97m\\", stdout); // fg bright white
+			setFgColor(255, 255, 255);
+			putwchar(L'\\');
+
 			switch (sepCount % 12)
 			{
-			case 0:	fputs("\x1B[31m", stdout); break; // fg red
-			case 1:	fputs("\x1B[91m", stdout); break; // fg bright red
-			case 2:	fputs("\x1B[33m", stdout); break; // fg yellow
-			case 3:	fputs("\x1B[93m", stdout); break; // fg bright yellow
-			case 4:	fputs("\x1B[92m", stdout); break; // fg bright green
-			case 5:	fputs("\x1B[32m", stdout); break; // fg green
-			case 6:	fputs("\x1B[96m", stdout); break; // fg bright cyan
-			case 7:	fputs("\x1B[36m", stdout); break; // fg cyan
-			case 8:	fputs("\x1B[94m", stdout); break; // fg bright blue
-			case 9:	fputs("\x1B[34m", stdout); break; // fg blue
-			case 10:fputs("\x1B[35m", stdout); break; // fg magenta
-			case 11:fputs("\x1B[95m", stdout); break; // fg bright magenta
+			case 0: setFgColor(255, 0, 0); break;
+			case 1: setFgColor(255, 127, 0); break;
+			case 2: setFgColor(255, 255, 0); break;
+			case 3: setFgColor(127, 255, 0); break;
+			case 4: setFgColor(0, 255, 0); break;
+			case 5: setFgColor(0, 255, 127); break;
+			case 6: setFgColor(0, 255, 255); break;
+			case 7: setFgColor(0, 127, 255); break;
+			case 8: setFgColor(0, 0, 255); break;
+			case 9: setFgColor(127, 0, 255); break;
+			case 10:setFgColor(255, 0, 255); break;
+			case 11:setFgColor(255, 0, 127); break;
 			}
 		}
 		else
@@ -159,13 +207,13 @@ static void rainbowPrintPath(const wchar_t* path, int consoleW)
 
 static void printFileName(const wchar_t* file, size_t maxNameLen)
 {
-	if ((long long)maxNameLen < 0)
+	if ((int)maxNameLen < 0)
 		maxNameLen = 0;
 
 	size_t len = wcslen(file);
 
 	size_t extPos = -1;
-	for (int i = len - 1; i >= 0; --i)
+	for (int i = (int)len - 1; i >= 0; --i)
 		if (file[i] == L'.')
 		{
 			extPos = i;
@@ -181,8 +229,8 @@ static void printFileName(const wchar_t* file, size_t maxNameLen)
 			size_t extLen = len - extPos;
 			if (extLen > maxNameLen) // This is a waste of time, unusable
 			{
-				fputs("\x1B[38;2;255;0;150m", stdout); // set fg color to hot pink
-				for (int i = extPos; i < maxNameLenExt; ++i)
+				setFgColor(EXTENSION_COLOR);
+				for (int i = (int)extPos; i < (int)maxNameLenExt; ++i)
 					putwchar(file[i]);
 				putwchar(L'.');
 				putwchar(L'.');
@@ -198,7 +246,7 @@ static void printFileName(const wchar_t* file, size_t maxNameLen)
 				putwchar(L'.');
 				putwchar(L'.');
 				putwchar(L'.');
-				fputs("\x1B[38;2;255;0;150m", stdout); // set fg color to hot pink
+				setFgColor(EXTENSION_COLOR);
 				for (size_t i = extPos; i < len; ++i)
 					putwchar(file[i]);
 			}
@@ -218,7 +266,7 @@ static void printFileName(const wchar_t* file, size_t maxNameLen)
 		{
 			for (size_t i = 0; i < extPos; ++i)
 				putwchar(file[i]);
-			fputs("\x1B[38;2;255;0;150m", stdout); // set fg color to hot pink
+			setFgColor(EXTENSION_COLOR);
 			for (size_t i = extPos; i < len; ++i)
 				putwchar(file[i]);
 		}
@@ -227,7 +275,7 @@ static void printFileName(const wchar_t* file, size_t maxNameLen)
 			for (size_t i = 0; i < len; ++i)
 				putwchar(file[i]);
 		}
-		for (int i = len; i < maxNameLen; ++i)
+		for (int i = (int)len; i < (int)maxNameLen; ++i)
 			putwchar(L' ');
 	}
 }
@@ -240,20 +288,25 @@ static void printFileArray(FileArray fileArray, int highlight, int start, int en
 	{
 		File file = fileArray.files[fileArray.count - 1 - i];
 		if (i == highlight)
+			setBgColor(HIGHLIGHT_COLOR);
+		else
 		{
-			fputs("\x1B[45m", stdout); // set bg color to magenta
+			if (i % 2)
+				setBgColor(BG_COLOR);
+			else
+				setBgColor(BG_ALT_COLOR);
 		}
 
 		if (file.isFile)
 		{
 			if (file.isArchive)
 			{
-				fputs("\x1B[96m", stdout); // set fg color to cyan
-				fputs("v ", stdout);
+				setFgColor(ARCHIVE_COLOR);
+				fputs("A ", stdout);
 			}
 			else
 			{
-				fputs("\x1B[97m", stdout); // set fg color to white
+				setFgColor(FILE_COLOR);
 				fputs("| ", stdout);
 			}
 
@@ -264,9 +317,9 @@ static void printFileArray(FileArray fileArray, int highlight, int start, int en
 			//	wprintf(L"%-*.*s| ", maxNameLen, maxNameLen, file.name);
 
 			if (file.isArchive)
-				fputs("\x1B[96m", stdout); // set fg color to cyan
+				setFgColor(ARCHIVE_COLOR);
 			else
-				fputs("\x1B[97m", stdout); // set fg color to white
+				setFgColor(FILE_COLOR);
 
 			int unit = 0;
 			size_t size = file.size;
@@ -275,11 +328,30 @@ static void printFileArray(FileArray fileArray, int highlight, int start, int en
 				++unit;
 				size /= 1000;
 			}
-			printf("| %3llu %cB |", size, " KMGTPE"[unit]);
+			printf("| ");
+			switch (unit % 7)
+			{
+			case 0: setFgColor(127, 255,   0); break;
+			case 1: setFgColor(255, 255,   0); break;
+			case 2: setFgColor(255, 127,   0); break;
+			case 3: setFgColor(255,   0,   0); break;
+			case 4: setFgColor(255,   0, 127); break;
+			case 5: setFgColor(255,   0, 255); break;
+			case 6: setFgColor(127,   0, 255); break;
+			}
+			printf("%3llu %cB", size, " KMGTPE"[unit]);
+			if (file.isArchive)
+				setFgColor(ARCHIVE_COLOR);
+			else
+				setFgColor(FILE_COLOR);
+			printf(" |");
 		}
 		else
 		{
-			fputs("\x1B[36m", stdout); // set fg color to blue (dark cyan)
+			if (file.size)
+				setFgColor(FOLDER_COLOR);
+			else
+				setFgColor(EMPTY_FOLDER_COLOR);
 			fputs("> ", stdout);
 			if (wcslen(file.name) > maxNameLen)
 				wprintf(L"%-*.*s...| ", maxNameLen - 3, maxNameLen - 3, file.name);
@@ -290,8 +362,8 @@ static void printFileArray(FileArray fileArray, int highlight, int start, int en
 		printf(" %04u/%02u/%02u %02u:%02u | %04u/%02u/%02u %02u:%02u |",
 			file.createTime.year, file.createTime.month, file.createTime.day, file.createTime.hour, file.createTime.minute,
 			file.writeTime.year, file.writeTime.month, file.writeTime.day, file.writeTime.hour, file.writeTime.minute);
-		fputs("\x1B[40m", stdout); // set bg color to black
-		fputs("\x1B[0K", stdout); // clear line after cursor
+		setBgColor(BG_COLOR);
+		clearLn();
 		fputs("\n", stdout);
 	}
 }
@@ -302,11 +374,16 @@ static void printDriveArray(DriveArray driveArray, int highlight, int start, int
 	{
 		Drive drive = driveArray.drives[driveArray.count - 1 - i];
 		if (i == highlight)
+			setBgColor(HIGHLIGHT_COLOR);
+		else
 		{
-			fputs("\x1B[45m", stdout); // set bg color to magenta
+			if (i % 2)
+				setBgColor(BG_COLOR);
+			else
+				setBgColor(BG_ALT_COLOR);
 		}
 
-		fputs("\x1B[36m", stdout); // set fg color to blue (dark cyan)
+		setFgColor(FOLDER_COLOR);
 		fputs("# ", stdout);
 		size_t drNameLen = wcslen(drive.name);
 		size_t drPathLen = wcslen(drive.path);
@@ -352,8 +429,8 @@ static void printDriveArray(DriveArray driveArray, int highlight, int start, int
 
 		printf("%3llu %cB free of %3llu %cB |", free, " KMGTPE"[freeUnit], cap, " KMGTPE"[capUnit]);
 		
-		fputs("\x1B[40m", stdout); // set bg color to black
-		fputs("\x1B[0K", stdout); // clear line after cursor
+		setBgColor(BG_COLOR);
+		clearLn();
 		fputs("\n", stdout);
 	}
 }
@@ -409,17 +486,19 @@ static void display(FileArray* fileArray, DriveArray* driveArray, bool isFileArr
 	if (end - start > consoleH - 3)
 		end = consoleH - 3 + start;
 
-	fputs("\x1B[3;r", stdout); // set scroll region
-	fputs("\x1B[?25l", stdout); // hides cursor
-	fputs("\x1B[;H", stdout); // reset cursor
+	setScrollLines(3);
+	hideCursor();
+	resetCursor();
 
 	size_t pathLen = wcslen(currentDir + 4);
 	if (isFileArray)
 	{
 		rainbowPrintPath(currentDir + 4, consoleW);
 
-		fputs("\x1B[40m\x1B[95m", stdout); // fg magenta, bg black
-		fputs("\x1B[0K\n", stdout); // clear line after cursor
+		setFgColor(SORT_BAR_COLOR);
+		setBgColor(BG_COLOR);
+		clearLn();
+		fputs("\n", stdout);
 
 		printf("| %-*s%c%c| Size  %c| Create          %c| Write           %c|", maxNameLen - 2, "Name",
 			(sortMethod == SORT_TYPE || sortMethod == SORT_TYPE_INV ? 't' : ' '),
@@ -431,10 +510,12 @@ static void display(FileArray* fileArray, DriveArray* driveArray, bool isFileArr
 	}
 	else
 	{
-		fputs("\x1B[40m\x1B[95m", stdout); // fg magenta, bg black
+		setFgColor(SORT_BAR_COLOR);
+		setBgColor(BG_COLOR);
 		wprintf(L"Drives");
 
-		fputs("\x1B[0K\n", stdout); // clear line after cursor
+		clearLn();
+		fputs("\n", stdout);
 
 		printf("| %-*s%c%c| Size                 %c|", maxNameLen - 2, "Name",
 			(sortMethod == SORT_PATH || sortMethod == SORT_PATH_INV ? 'p' : ' '),
@@ -443,15 +524,16 @@ static void display(FileArray* fileArray, DriveArray* driveArray, bool isFileArr
 		);
 	}
 
-	fputs("\x1B[0K\n", stdout); // clear line after cursor
+	clearLn();
+	fputs("\n", stdout);
 
 	if (isFileArray)
 		printFileArray(*fileArray, highlight, start, end, maxNameLen);
 	else
 		printDriveArray(*driveArray, highlight, start, end, maxNameLen);
 
-	fputs("\x1B[40m", stdout); // set bg color to black
-	fputs("\x1B[0J", stdout); // clear screen after cursor
+	setBgColor(BG_COLOR);
+	clearScr();
 }
 
 
@@ -664,9 +746,30 @@ int main()
 			reprint = true;
 
 			if (isFileArray)
+			{
 				sortFileArray(&fileArray, sortMethod);
+				for (int i = 0; i < fileArray.count; ++i)
+				{
+					if (wcscmp(fileArray.files[i].name, retDir) == 0)
+					{
+						highlight = (int)fileArray.count - 1 - i;
+						break;
+					}
+				}
+			}
 			else
+			{
 				sortDriveArray(&driveArray, sortMethod);
+
+				for (int i = 0; i < driveArray.count; ++i)
+				{
+					if (wcscmp(driveArray.drives[i].name, retDir) == 0)
+					{
+						highlight = (int)driveArray.count - 1 - i;
+						break;
+					}
+				}
+			}
 		}
 		if (reprint)
 		{

@@ -1,8 +1,11 @@
 # Terminal <ins>FI</ins>le <ins>BR</ins>owser<br>
-<br>
-Blue entries are directories.<br>
-Cyan entries are archives.<br>
-White entries are files.<br>
+
+## Default colors for entries:<br>
+- Blue - Directories
+- Dark Blue - Empty Directories
+- Cyan - Archives
+- Green - Files
+- Pink - Dot Files
 
 ## Controls:<br>
 - Arrow keys:<br>
