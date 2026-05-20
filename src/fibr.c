@@ -745,28 +745,44 @@ int main()
 			resort = false;
 			reprint = true;
 
-			if (isFileArray)
+			if (dataCount)
 			{
-				sortFileArray(&fileArray, sortMethod);
-				for (int i = 0; i < fileArray.count; ++i)
+				if (isFileArray)
 				{
-					if (wcscmp(fileArray.files[i].name, retDir) == 0)
+					size_t tempLen = wcslen(fileArray.files[fileArray.count - 1 - highlight].name) + 1;
+					wchar_t* temp = malloc(sizeof(wchar_t) * tempLen);
+					if (temp)
 					{
-						highlight = (int)fileArray.count - 1 - i;
-						break;
+						memcpy(temp, fileArray.files[fileArray.count - 1 - highlight].name, sizeof(wchar_t) * tempLen);
+						sortFileArray(&fileArray, sortMethod);
+						for (int i = 0; i < fileArray.count; ++i)
+						{
+							if (wcscmp(fileArray.files[i].name, temp) == 0)
+							{
+								highlight = (int)fileArray.count - 1 - i;
+								break;
+							}
+						}
+						free(temp);
 					}
 				}
-			}
-			else
-			{
-				sortDriveArray(&driveArray, sortMethod);
-
-				for (int i = 0; i < driveArray.count; ++i)
+				else
 				{
-					if (wcscmp(driveArray.drives[i].name, retDir) == 0)
+					size_t tempLen = wcslen(driveArray.drives[driveArray.count - 1 - highlight].name) + 1;
+					wchar_t* temp = malloc(sizeof(wchar_t) * tempLen);
+					if (temp)
 					{
-						highlight = (int)driveArray.count - 1 - i;
-						break;
+						memcpy(temp, driveArray.drives[driveArray.count - 1 - highlight].name, sizeof(wchar_t) * tempLen);
+						sortDriveArray(&driveArray, sortMethod);
+						for (int i = 0; i < driveArray.count; ++i)
+						{
+							if (wcscmp(driveArray.drives[i].name, temp) == 0)
+							{
+								highlight = (int)driveArray.count - 1 - i;
+								break;
+							}
+						}
+						free(temp);
 					}
 				}
 			}
