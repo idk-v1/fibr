@@ -68,18 +68,18 @@ static void showCursor() { fputs("\x1B[?25h", stdout); } // hides cursor
 static void resetCursor() { fputs("\x1B[;H", stdout); } // reset cursor
 
 
-static void initCurrentDir(wchar_t** currentDir)
+static wchar_t* initCurrentDir(void)
 {
-	wchar_t* dir = NULL;
 	int numArgs;
 	wchar_t** args = CommandLineToArgvW(GetCommandLineW(), &numArgs);
 	if (numArgs > 1) // Only need 1 extra optional for starting dir
 	{
 		size_t pathLen = wcslen(args[1]);
-		dir = malloc(sizeof(wchar_t) * (pathLen + 1 + 4));
+		wchar_t* dir = malloc(sizeof(wchar_t) * (pathLen + 1 + 4));
 		if (!dir)
-			return;
+			return NULL;
 
+		// strcpy, but replace '/' with '\\'
 		for (size_t i = 0; i <= pathLen; ++i)
 		{
 			if (args[1][i] == L'/')
@@ -87,22 +87,19 @@ static void initCurrentDir(wchar_t** currentDir)
 			else
 				dir[i + 4] = args[1][i];
 		}
+		dir[0] = L'\\';
+		dir[1] = L'\\';
+		dir[2] = L'?';
+		dir[3] = L'\\';
+
+		LocalFree(args);
+		return dir;
 	}
 	else
 	{
-		size_t pathLen = GetCurrentDirectoryW(0, NULL); // returns size needed including null
-		dir = malloc(sizeof(wchar_t) * (pathLen + 4));
-		if (!dir)
-			return;
-
-		GetCurrentDirectoryW((DWORD)pathLen, dir + 4);
+		LocalFree(args);
+		return getCurrentDir();
 	}
-
-	dir[0] = L'\\';
-	dir[1] = L'\\';
-	dir[2] = L'?';
-	dir[3] = L'\\';
-	*currentDir = dir;
 }
 
 static void enableVT()
@@ -511,7 +508,7 @@ static void display(FileArray* fileArray, DriveArray* driveArray, bool isFileArr
 		fputs("\n", stdout);
 
 		printf("| %-*s%c%c| Size  %c| Create          %c| Write           %c|", maxNameLen - 2, "Name",
-			(sortMethod == SORT_TYPE || sortMethod == SORT_TYPE_INV ? 't' : ' '),
+			(sortMethod == SORT_TYPE || sortMethod == SORT_TYPE_INV ? 'T' : ' '),
 			(sortMethod == SORT_NAME || sortMethod == SORT_TYPE ? '^' : (sortMethod == SORT_NAME_INV || sortMethod == SORT_TYPE_INV ? 'v' : ' ')),
 			(sortMethod == SORT_SIZE ? '^' : (sortMethod == SORT_SIZE_INV ? 'v' : ' ')),
 			(sortMethod == SORT_CREATE ? '^' : (sortMethod == SORT_CREATE_INV ? 'v' : ' ')),
@@ -528,8 +525,8 @@ static void display(FileArray* fileArray, DriveArray* driveArray, bool isFileArr
 		fputs("\n", stdout);
 
 		printf("| %-*s%c%c| Size                 %c|", maxNameLen - 2, "Name",
-			(sortMethod == SORT_PATH || sortMethod == SORT_PATH_INV ? 'p' : ' '),
-			(sortMethod == SORT_NAME || sortMethod == SORT_PATH ? '^' : (sortMethod == SORT_NAME_INV || sortMethod == SORT_PATH_INV ? 'v' : ' ')),
+			(sortMethod == SORT_LETTER || sortMethod == SORT_LETTER_INV ? 'L' : ' '),
+			(sortMethod == SORT_NAME || sortMethod == SORT_LETTER ? '^' : (sortMethod == SORT_NAME_INV || sortMethod == SORT_LETTER_INV ? 'v' : ' ')),
 			(sortMethod == SORT_SIZE ? '^' : (sortMethod == SORT_SIZE_INV ? 'v' : ' '))
 		);
 	}
@@ -628,6 +625,121 @@ static void dirStackInit(DirStack* stack, const wchar_t* path)
 }
 
 
+static void resortDir(const wchar_t* currentDir, FileArray* fileArray, 
+	DriveArray* driveArray, bool isFileArray, int sortMethod, int* highlight, wchar_t** retDir)
+{
+	if (isFileArray)
+	{
+		if (fileArray->count)
+		{
+			wchar_t* temp = fileArray->files[fileArray->count - 1 - *highlight].name;
+			sortFileArray(fileArray, sortMethod);
+			if (*retDir)
+			{
+				for (int i = 0; i < fileArray->count; ++i)
+				{
+					if (wcscmp(fileArray->files[i].name, *retDir) == 0)
+					{
+						*highlight = (int)fileArray->count - 1 - i;
+						break;
+					}
+				}
+
+				free(*retDir);
+				*retDir = NULL;
+			}
+			else
+			{
+				for (int i = 0; i < fileArray->count; ++i)
+				{
+					if (wcscmp(fileArray->files[i].name, temp) == 0)
+					{
+						*highlight = (int)fileArray->count - 1 - i;
+						break;
+					}
+				}
+			}
+		}
+	}
+	else
+	{
+		if (driveArray->count)
+		{
+			wchar_t* temp = driveArray->drives[driveArray->count - 1 - *highlight].name;
+			sortDriveArray(driveArray, sortMethod);
+			if (*retDir)
+			{
+				for (int i = 0; i < driveArray->count; ++i)
+				{
+					if (wcscmp(driveArray->drives[i].path, *retDir) == 0)
+					{
+						*highlight = (int)driveArray->count - 1 - i;
+						break;
+					}
+				}
+
+				free(*retDir);
+				*retDir = NULL;
+			}
+			else
+			{
+				for (int i = 0; i < driveArray->count; ++i)
+				{
+					if (wcscmp(driveArray->drives[i].name, temp) == 0)
+					{
+						*highlight = (int)driveArray->count - 1 - i;
+						break;
+					}
+				}
+			}
+		}
+	}
+
+	int consoleW = 0, consoleH = 0;
+	getConsoleSize(&consoleW, &consoleH);
+	display(fileArray, driveArray, isFileArray, sortMethod, currentDir, *highlight, consoleW, consoleH);
+}
+
+static void changedDir(const wchar_t* currentDir, FileArray* fileArray, 
+	DriveArray* driveArray, bool* isFileArray, bool loadSubdirs, 
+	int* sortMethod, int* highlight, size_t* dataCount, wchar_t** retDir)
+{
+	*highlight = 0;
+
+	if (*isFileArray)
+		freeFileArray(fileArray);
+	else
+		freeDriveArray(driveArray);
+
+	if (wcslen(currentDir) > 4)
+	{
+		*fileArray = getFilesInDir(currentDir, loadSubdirs);
+		*isFileArray = true;
+
+		*dataCount = fileArray->count;
+
+		// Needs to be sorted for highlight to be correct
+		if (*sortMethod == SORT_LETTER || *sortMethod == SORT_LETTER_INV)
+			*sortMethod = SORT_NAME;
+	}
+	else
+	{
+		*driveArray = getDrives();
+		*isFileArray = false;
+
+		*dataCount = driveArray->count;
+
+		// Needs to be sorted for highlight to be correct
+		if (*sortMethod == SORT_TYPE   || *sortMethod == SORT_TYPE_INV ||
+			*sortMethod == SORT_CREATE || *sortMethod == SORT_CREATE_INV ||
+			*sortMethod == SORT_WRITE  || *sortMethod == SORT_WRITE_INV)
+			*sortMethod = SORT_NAME;
+	}
+
+	resortDir(currentDir, fileArray, driveArray, *isFileArray, *sortMethod, highlight, retDir);
+}
+
+
 int main()
 {
 	// read last size from file
@@ -639,8 +751,7 @@ int main()
 
 	HWND consoleWnd = GetConsoleWindow();
 
-	wchar_t* currentDir = NULL;
-	initCurrentDir(&currentDir);
+	wchar_t* currentDir = initCurrentDir();
 
 	DirStack dirStack = { 0 };
 	dirStackInit(&dirStack, currentDir);
@@ -651,23 +762,14 @@ int main()
 	bool isFileArray = wcslen(currentDir) > 4;
 
 	int highlight = 0;
-	int downLast = 0;
-	int upLast = 0;
-	bool rightLast = false;
-	bool leftLast = false;
+
+	int keyboard[256] = { 0 };
+	int keyRepWait = 6;
 
 	bool dirChanged = true;
 	bool reprint = true;
 	bool resort = true;
 	wchar_t* retDir = NULL;
-
-	bool nLast = false;
-	bool tLast = false;
-	bool sLast = false;
-	bool cLast = false;
-	bool wLast = false;
-	bool pLast = false;
-
 	bool loadSubdirs = true;
 
 	int sortMethod = SORT_NAME;
@@ -684,118 +786,15 @@ int main()
 		if (dirChanged)
 		{
 			dirChanged = false;
-			reprint = true;
-
-			highlight = 0;
-
-			if (isFileArray)
-				freeFileArray(&fileArray);
-			else
-				freeDriveArray(&driveArray);
-
-			if (wcslen(currentDir) > 4)
-			{
-				fileArray = getFilesInDir(currentDir, loadSubdirs);
-				dataCount = fileArray.count;
-				isFileArray = true;
-				
-				// Needs to be sorted for highlight to be correct
-				if (sortMethod == SORT_PATH || sortMethod == SORT_PATH_INV)
-					sortMethod = SORT_NAME;
-				sortFileArray(&fileArray, sortMethod);
-				if (retDir)
-				{
-					for (int i = 0; i < fileArray.count; ++i)
-					{
-						if (wcscmp(fileArray.files[i].name, retDir) == 0)
-						{
-							highlight = (int)fileArray.count - 1 - i;
-							break;
-						}
-					}
-
-					free(retDir);
-					retDir = NULL;
-				}
-			}
-			else
-			{
-				driveArray = getDrives();
-				dataCount = driveArray.count;
-				isFileArray = false;
-
-				// Needs to be sorted for highlight to be correct
-				if (sortMethod == SORT_TYPE || sortMethod == SORT_TYPE_INV || 
-					sortMethod == SORT_CREATE || sortMethod == SORT_CREATE_INV ||
-					sortMethod == SORT_WRITE || sortMethod == SORT_WRITE_INV)
-					sortMethod = SORT_NAME;
-				sortDriveArray(&driveArray, sortMethod);
-				if (retDir)
-				{
-					for (int i = 0; i < driveArray.count; ++i)
-					{
-						if (wcscmp(driveArray.drives[i].path, retDir) == 0)
-						{
-							highlight = (int)driveArray.count - 1 - i;
-							break;
-						}
-					}
-
-					free(retDir);
-					retDir = NULL;
-				}
-
-			}
-
 			resort = false;
-			reprint = true;
+			reprint = false;
+			changedDir(currentDir, &fileArray, &driveArray, &isFileArray, loadSubdirs, &sortMethod, &highlight, &dataCount, &retDir);
 		}
 		if (resort)
 		{
 			resort = false;
-			reprint = true;
-
-			if (dataCount)
-			{
-				if (isFileArray)
-				{
-					size_t tempLen = wcslen(fileArray.files[fileArray.count - 1 - highlight].name) + 1;
-					wchar_t* temp = malloc(sizeof(wchar_t) * tempLen);
-					if (temp)
-					{
-						memcpy(temp, fileArray.files[fileArray.count - 1 - highlight].name, sizeof(wchar_t) * tempLen);
-						sortFileArray(&fileArray, sortMethod);
-						for (int i = 0; i < fileArray.count; ++i)
-						{
-							if (wcscmp(fileArray.files[i].name, temp) == 0)
-							{
-								highlight = (int)fileArray.count - 1 - i;
-								break;
-							}
-						}
-						free(temp);
-					}
-				}
-				else
-				{
-					size_t tempLen = wcslen(driveArray.drives[driveArray.count - 1 - highlight].name) + 1;
-					wchar_t* temp = malloc(sizeof(wchar_t) * tempLen);
-					if (temp)
-					{
-						memcpy(temp, driveArray.drives[driveArray.count - 1 - highlight].name, sizeof(wchar_t) * tempLen);
-						sortDriveArray(&driveArray, sortMethod);
-						for (int i = 0; i < driveArray.count; ++i)
-						{
-							if (wcscmp(driveArray.drives[i].name, temp) == 0)
-							{
-								highlight = (int)driveArray.count - 1 - i;
-								break;
-							}
-						}
-						free(temp);
-					}
-				}
-			}
+			reprint = false;
+			resortDir(currentDir, &fileArray, &driveArray, isFileArray, sortMethod, &highlight, &retDir);
 		}
 		if (reprint)
 		{
@@ -805,41 +804,42 @@ int main()
 
 		if (consoleWnd == GetForegroundWindow())
 		{
-			bool ctrl = GetKeyState(VK_CONTROL) & 0x8000;
-			bool keydown = GetKeyState(VK_DOWN) & 0x8000;
-			bool keyup = GetKeyState(VK_UP) & 0x8000;
-			bool keyright = GetKeyState(VK_RIGHT) & 0x8000;
-			bool keyleft = GetKeyState(VK_LEFT) & 0x8000;
+			for (int i = 0; i < 256; ++i)
+			{
+				if (GetKeyState(i) & 0x8000)
+					++keyboard[i];
+				else
+					keyboard[i] = 0;
+			}
 
-			if (GetKeyState(VK_ESCAPE) & 0x8000)
+			if (keyboard[VK_ESCAPE])
 				running = false;
 
-			int keyRepWait = 6;
-			if (keydown && (downLast + keyRepWait - 1) / keyRepWait != 1)
+			if (keyboard[VK_DOWN] && (keyboard[VK_DOWN] + keyRepWait - 2) / keyRepWait != 1)
 			{
 				if (highlight + 1ull < dataCount)
 				{
-					if (ctrl)
+					if (keyboard[VK_CONTROL])
 						highlight = min((int)dataCount - 1, highlight + 5);
 					else
 						++highlight;
 					reprint = true;
 				}
 			}
-			if (keyup && (upLast + keyRepWait - 1) / keyRepWait != 1)
+			if (keyboard[VK_UP] && (keyboard[VK_UP] + keyRepWait - 2) / keyRepWait != 1)
 			{
 				if (highlight > 0)
 				{
-					if (ctrl)
+					if (keyboard[VK_CONTROL])
 						highlight = max(0, highlight - 5);
 					else
 						--highlight;
 					reprint = true;
 				}
 			}
-			if (keyright && !rightLast)
+			if (keyboard[VK_RIGHT] == 1)
 			{
-				loadSubdirs = !ctrl;
+				loadSubdirs = !keyboard[VK_CONTROL];
 				if (isFileArray)
 				{
 					if (fileArray.count && !fileArray.files[fileArray.count - 1 - highlight].isFile)
@@ -861,9 +861,9 @@ int main()
 					}
 				}
 			}
-			if (keyleft && !leftLast)
+			if (keyboard[VK_LEFT] == 1)
 			{
-				loadSubdirs = !ctrl;
+				loadSubdirs = !keyboard[VK_CONTROL];
 				dirChanged = true;
 
 				bool error = false;
@@ -874,20 +874,7 @@ int main()
 				retDir = dirStackPop(&dirStack);
 			}
 
-			if (keydown) ++downLast;
-			else downLast = 0;
-			if (keyup) ++upLast;
-			else upLast = 0;
-			rightLast = keyright;
-			leftLast = keyleft;
-
-			bool nKey = GetKeyState('N') & 0x8000;
-			bool tKey = GetKeyState('T') & 0x8000;
-			bool sKey = GetKeyState('S') & 0x8000;
-			bool cKey = GetKeyState('C') & 0x8000;
-			bool wKey = GetKeyState('W') & 0x8000;
-			bool pKey = GetKeyState('P') & 0x8000;
-			if (nKey && !nLast)
+			if (keyboard['N'] == 1)
 			{
 				if (sortMethod == SORT_NAME)
 					sortMethod = SORT_NAME_INV;
@@ -895,7 +882,7 @@ int main()
 					sortMethod = SORT_NAME;
 				resort = true;
 			}
-			if (tKey && !tLast && isFileArray)
+			if (keyboard['T'] == 1)
 			{
 				if (sortMethod == SORT_TYPE)
 					sortMethod = SORT_TYPE_INV;
@@ -903,7 +890,7 @@ int main()
 					sortMethod = SORT_TYPE;
 				resort = true;
 			}
-			if (sKey && !sLast)
+			if (keyboard['S'] == 1)
 			{
 				if (sortMethod == SORT_SIZE)
 					sortMethod = SORT_SIZE_INV;
@@ -911,7 +898,7 @@ int main()
 					sortMethod = SORT_SIZE;
 				resort = true;
 			}
-			if (cKey && !cLast && isFileArray)
+			if (keyboard['C'] == 1)
 			{
 				if (sortMethod == SORT_CREATE)
 					sortMethod = SORT_CREATE_INV;
@@ -919,7 +906,7 @@ int main()
 					sortMethod = SORT_CREATE;
 				resort = true;
 			}
-			if (wKey && !wLast && isFileArray)
+			if (keyboard['W'] == 1)
 			{
 				if (sortMethod == SORT_WRITE)
 					sortMethod = SORT_WRITE_INV;
@@ -927,21 +914,15 @@ int main()
 					sortMethod = SORT_WRITE;
 				resort = true;
 			}
-			if (pKey && !pLast && !isFileArray)
+			if (keyboard['L'] == 1)
 			{
-				if (sortMethod == SORT_PATH)
-					sortMethod = SORT_PATH_INV;
+				if (sortMethod == SORT_LETTER)
+					sortMethod = SORT_LETTER_INV;
 				else
-					sortMethod = SORT_PATH;
+					sortMethod = SORT_LETTER;
 				resort = true;
 			}
 
-			nLast = nKey;
-			tLast = tKey;
-			sLast = sKey;
-			cLast = cKey;
-			wLast = wKey;
-			pLast = pKey;
 		}
 
 		Sleep(50);

@@ -22,7 +22,7 @@ static bool shouldHideDrive(const wchar_t* name)
 	return false;
 }
 
-DriveArray getDrives()
+DriveArray getDrives(void)
 {
 	wchar_t buf[MAX_PATH] = { 0 };
 	DWORD bufsize = MAX_PATH;
@@ -142,7 +142,7 @@ void freeDriveArray(DriveArray* array)
 	}
 }
 
-FileArray getDrivesAsFileArray()
+FileArray getDrivesAsFileArray(void)
 {
 	DriveArray drives = getDrives();
 
@@ -735,14 +735,13 @@ void sortDriveArray(DriveArray* driveArray, int option)
 	case SORT_NAME_INV: cmpFnc = cmpDrivesNameInvTop; break;
 	case SORT_SIZE: cmpFnc = cmpDrivesSizeTop; break;
 	case SORT_SIZE_INV: cmpFnc = cmpDrivesSizeInvTop; break;
-	case SORT_PATH: cmpFnc = cmpDrivesPathTop; break;
-	case SORT_PATH_INV: cmpFnc = cmpDrivesPathInvTop; break;
+	case SORT_LETTER: cmpFnc = cmpDrivesPathTop; break;
+	case SORT_LETTER_INV: cmpFnc = cmpDrivesPathInvTop; break;
 	}
 
 	if (cmpFnc)
 		qsort(driveArray->drives, driveArray->count, sizeof(Drive), cmpFnc);
 }
-
 
 
 wchar_t* moveDirUp(wchar_t* dir, bool* error)
@@ -796,4 +795,22 @@ wchar_t* moveDirDown(wchar_t* dir, const wchar_t* subdir, bool* error)
 
 	free(dir);
 	return newDir;
+}
+
+
+wchar_t* getCurrentDir(void)
+{
+	size_t pathLen = GetCurrentDirectoryW(0, NULL); // returns size needed including null
+	wchar_t* dir = malloc(sizeof(wchar_t) * (pathLen + 4));
+	if (!dir)
+		return NULL;
+
+	GetCurrentDirectoryW((DWORD)pathLen, dir + 4);
+
+	dir[0] = L'\\';
+	dir[1] = L'\\';
+	dir[2] = L'?';
+	dir[3] = L'\\';
+
+	return dir;
 }

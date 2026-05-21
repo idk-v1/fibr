@@ -26,7 +26,7 @@
   - For drive view:
     - N sorts by name
     - S sorts by free space
-    - P sorts by drive path
+    - L sorts by drive letter (or path if you have way too many drives)
 - Escape exits program<br>
 
 ## Screenshots:<br>

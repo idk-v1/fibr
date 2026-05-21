@@ -54,8 +54,8 @@ enum
 	SORT_WRITE_INV,
 	SORT_TYPE,
 	SORT_TYPE_INV,
-	SORT_PATH,
-	SORT_PATH_INV,
+	SORT_LETTER,
+	SORT_LETTER_INV,
 };
 
 void sortFileArray(FileArray* fileArray, int option);
@@ -79,10 +79,13 @@ typedef struct DriveArray
 	size_t count;
 } DriveArray;
 
-DriveArray getDrives();
+DriveArray getDrives(void);
 
 void freeDriveArray(DriveArray* array);
 
-FileArray getDrivesAsFileArray();
+FileArray getDrivesAsFileArray(void);
 
 void sortDriveArray(DriveArray* driveArray, int option);
+
+
+wchar_t* getCurrentDir(void);
