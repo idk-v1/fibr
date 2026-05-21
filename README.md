@@ -4,6 +4,7 @@
 - Blue - Directories
 - Dark Blue - Empty Directories
 - Cyan - Archives
+- Red - Executables
 - Green - Files
 - Pink - Dot Files
 

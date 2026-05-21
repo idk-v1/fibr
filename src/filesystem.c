@@ -224,6 +224,42 @@ static bool isArchive(const wchar_t* name)
 }
 
 
+static bool isExecutable(const wchar_t* name)
+{
+	const wchar_t* exts[] =
+	{
+		L"exe",
+		L"msi",
+		L"scr",
+		L"msc",
+		L"ps1",
+		L"cmd",
+		L"bat",
+		L"com",
+	};
+
+	int len = (int)wcslen(name);
+	int extPos = -1;
+	for (int i = len - 1; i >= 0; --i)
+	{
+		if (name[i] == L'.')
+		{
+			extPos = i + 1;
+			break;
+		}
+	}
+	if (extPos == -1)
+		return false;
+
+	for (size_t i = 0; i < sizeof(exts) / sizeof(wchar_t*); ++i)
+	{
+		if (lstrcmpiW(name + extPos, exts[i]) == 0)
+			return true;
+	}
+
+	return false;
+}
+
 FileArray getFilesInDir(const wchar_t* path, bool subdirCount)
 {
 	if (!path)
@@ -317,6 +353,7 @@ FileArray getFilesInDir(const wchar_t* path, bool subdirCount)
 			file.size = fileSize.QuadPart;
 
 			file.isArchive = isArchive(file.name);
+			file.isExec = isExecutable(file.name);
 		}
 		else if (subdirCount)
 		{

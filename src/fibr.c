@@ -5,6 +5,7 @@
 
 #define EXTENSION_COLOR         255,  50, 150
 #define ARCHIVE_COLOR             0, 255, 255
+#define EXECUTABLE_COLOR        255,  31,  63
 #define FILE_COLOR                0, 255, 191
 #define FOLDER_COLOR              0, 159, 255
 #define EMPTY_FOLDER_COLOR        0,  95, 191
@@ -17,7 +18,7 @@
 static void printU8(int num)
 {
 	char buf[4] = { 0 };
-	buf[0] = '0' + num / 100;
+	buf[0] = '0' + num / 100 % 10;
 	buf[1] = '0' + num / 10 % 10;
 	buf[2] = '0' + num % 10;
 	fputs(buf, stdout);
@@ -117,7 +118,7 @@ static void enableVT()
 	SetConsoleMode(hConsole, mode | ENABLE_VIRTUAL_TERMINAL_INPUT);
 	
 	newScreenBuf();
-	setWindowTitle("FiBr File Browser 0.1.8");
+	setWindowTitle("FiBr File Browser 0.1.9");
 }
 
 static void resetTerminal()
@@ -304,6 +305,11 @@ static void printFileArray(FileArray fileArray, int highlight, int start, int en
 				setFgColor(ARCHIVE_COLOR);
 				fputs("A ", stdout);
 			}
+			else if (file.isExec)
+			{
+				setFgColor(EXECUTABLE_COLOR);
+				fputs("X ", stdout);
+			}
 			else
 			{
 				setFgColor(FILE_COLOR);
@@ -318,6 +324,8 @@ static void printFileArray(FileArray fileArray, int highlight, int start, int en
 
 			if (file.isArchive)
 				setFgColor(ARCHIVE_COLOR);
+			else if (file.isExec)
+				setFgColor(EXECUTABLE_COLOR);
 			else
 				setFgColor(FILE_COLOR);
 
@@ -342,6 +350,8 @@ static void printFileArray(FileArray fileArray, int highlight, int start, int en
 			printf("%3llu %cB", size, " KMGTPE"[unit]);
 			if (file.isArchive)
 				setFgColor(ARCHIVE_COLOR);
+			else if (file.isExec)
+				setFgColor(EXECUTABLE_COLOR);
 			else
 				setFgColor(FILE_COLOR);
 			printf(" |");
