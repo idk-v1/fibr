@@ -41,8 +41,8 @@ DriveArray getDrives(void)
 
 	DriveArray array = { 0 };
 	// for more that 26, unknown number, just double
-	size_t cap = bitcount;
-	array.drives = malloc(sizeof(Drive) * cap);
+	array.cap = bitcount;
+	array.drives = malloc(sizeof(Drive) * array.cap);
 	if (!array.drives)
 	{
 		FindVolumeClose(hVol);
@@ -58,10 +58,10 @@ DriveArray getDrives(void)
 		GetVolumeInformationW(buf, devName, MAX_PATH, NULL, NULL, NULL, NULL, 0);
 		if (!shouldHideDrive(devName))
 		{
-			if (array.count + 1 > cap)
+			if (array.count + 1 > array.cap)
 			{
-				cap *= 2;
-				Drive* temp = realloc(array.drives, sizeof(Drive) * cap);
+				array.cap *= 2;
+				Drive* temp = realloc(array.drives, sizeof(Drive) * array.cap);
 				if (temp)
 					array.drives = temp;
 				else
@@ -139,6 +139,8 @@ void freeDriveArray(DriveArray* array)
 			free(array->drives);
 			array->drives = NULL;
 		}
+		array->count = 0;
+		array->cap = 0;
 	}
 }
 
@@ -148,6 +150,7 @@ FileArray getDrivesAsFileArray(void)
 
 	FileArray array = { 0 };
 	array.count = drives.count;
+	array.cap = array.count;
 	array.files = malloc(sizeof(File) * array.count);
 	if (!array.files)
 	{
@@ -310,9 +313,9 @@ FileArray getFilesInDir(const wchar_t* path, bool subdirCount)
 
 
 	FileArray array = { 0 };
-	size_t cap = 16;
+	array.cap = 16;
 
-	array.files = malloc(sizeof(File) * cap);
+	array.files = malloc(sizeof(File) * array.cap);
 	if (!array.files)
 	{
 		FindClose(hFind);
@@ -322,10 +325,10 @@ FileArray getFilesInDir(const wchar_t* path, bool subdirCount)
 
 	while (FindNextFileW(hFind, &findData))
 	{
-		if (array.count + 1 > cap)
+		if (array.count + 1 > array.cap)
 		{
-			cap *= 2;
-			File* temp = realloc(array.files, sizeof(File) * cap);
+			array.cap *= 2;
+			File* temp = realloc(array.files, sizeof(File) * array.cap);
 			if (temp)
 				array.files = temp;
 			else break; // be happy with what we've got
@@ -467,6 +470,7 @@ void freeFileArray(FileArray* fileArray)
 			fileArray->files = NULL;
 		}
 		fileArray->count = 0;
+		fileArray->cap = 0;
 	}
 }
 
@@ -813,4 +817,323 @@ wchar_t* getCurrentDir(void)
 	dir[3] = L'\\';
 
 	return dir;
+}
+
+
+
+bool watchDirStart(const wchar_t* path, WatchDirInfo* info)
+{
+	if (path)
+	{
+		info->hDir = CreateFileW(path,
+			FILE_LIST_DIRECTORY, FILE_SHARE_DELETE | FILE_SHARE_READ | FILE_SHARE_WRITE,
+			NULL, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OVERLAPPED, NULL);
+
+		if (info->hDir != INVALID_HANDLE_VALUE)
+		{
+			info->bufSize = USHRT_MAX;
+			info->buf = malloc(USHRT_MAX);
+
+			if (info->buf)
+			{
+				info->overlapped.hEvent = CreateEventW(NULL, false, false, NULL);
+				if (info->overlapped.hEvent)
+				{
+					if (ReadDirectoryChangesW(info->hDir, info->buf, info->bufSize, false,
+						FILE_NOTIFY_CHANGE_FILE_NAME | FILE_NOTIFY_CHANGE_DIR_NAME |
+						FILE_NOTIFY_CHANGE_ATTRIBUTES | FILE_NOTIFY_CHANGE_SIZE |
+						FILE_NOTIFY_CHANGE_LAST_WRITE | FILE_NOTIFY_CHANGE_CREATION,
+						NULL, &info->overlapped, NULL))
+					{
+						return true;
+					}
+
+					CloseHandle(info->overlapped.hEvent);
+				}
+
+				free(info->buf);
+			}
+
+			CloseHandle(info->hDir);
+		}
+	}
+
+	memset(info, 0, sizeof(WatchDirInfo));
+	return false;
+}
+
+FILE_NOTIFY_INFORMATION* watchDirIterate(WatchDirInfo* info)
+{
+	static size_t dataPos = -1;
+
+	if (dataPos != -1)
+	{
+		FILE_NOTIFY_INFORMATION* fni = (FILE_NOTIFY_INFORMATION*)((char*)(info->buf) + dataPos);
+
+		if (fni->NextEntryOffset == 0)
+		{
+			ReadDirectoryChangesW(info->hDir, info->buf, info->bufSize, false,
+				FILE_NOTIFY_CHANGE_FILE_NAME | FILE_NOTIFY_CHANGE_DIR_NAME |
+				FILE_NOTIFY_CHANGE_ATTRIBUTES | FILE_NOTIFY_CHANGE_SIZE |
+				FILE_NOTIFY_CHANGE_LAST_WRITE | FILE_NOTIFY_CHANGE_CREATION,
+				NULL, &info->overlapped, NULL);
+
+			dataPos = -1;
+			return NULL;
+		}
+		else
+		{
+			dataPos += fni->NextEntryOffset;
+			fni = (FILE_NOTIFY_INFORMATION*)((char*)(info->buf) + dataPos);
+			return fni;
+		}
+	}
+	else
+	{
+		DWORD state = WaitForSingleObject(info->overlapped.hEvent, 0);
+		if (state == WAIT_OBJECT_0)
+		{
+			DWORD retSize = 0;
+			GetOverlappedResult(info->hDir, &info->overlapped, &retSize, false);
+
+			dataPos = 0;
+			return info->buf;
+		}
+		else
+		{
+			dataPos = -1;
+			return NULL;
+		}
+	}
+}
+
+void watchDirStop(WatchDirInfo* info)
+{
+	if (info)
+	{
+		if (info->buf)
+			free(info->buf);
+
+		CloseHandle(info->hDir);
+
+		CloseHandle(info->overlapped.hEvent);
+
+		memset(info, 0, sizeof(WatchDirInfo));
+	}
+}
+
+
+static bool isFileDir(const wchar_t* file)
+{
+	return GetFileAttributesW(file) & FILE_ATTRIBUTE_DIRECTORY;
+}
+
+static bool getFileInfo(File* file, const wchar_t* dir)
+{
+	wchar_t* fullName = strSubdir(dir, file->name);
+	if (fullName)
+	{
+		file->isFile = !isFileDir(fullName);
+
+		HANDLE handle = CreateFileW(fullName, GENERIC_READ,
+			FILE_SHARE_DELETE | FILE_SHARE_READ | FILE_SHARE_WRITE,
+			NULL, OPEN_EXISTING, (file->isFile ? FILE_ATTRIBUTE_NORMAL : FILE_FLAG_BACKUP_SEMANTICS), NULL);
+		if (handle != INVALID_HANDLE_VALUE)
+		{
+			if (file->isFile)
+			{
+				file->isArchive = isArchive(file->name);
+				file->isExec = isExecutable(file->name);
+
+				LARGE_INTEGER size = { 0 };
+				GetFileSizeEx(handle, &size);
+				file->size = size.QuadPart;
+			}
+			else
+			{
+				file->size = getFileCountInDir(fullName);
+			}
+
+			FILETIME create = { 0 }, write = { 0 };
+			GetFileTime(handle, &create, NULL, &write);
+
+			file->createTime = dateFromFiletime(create);
+			file->writeTime = dateFromFiletime(write);
+
+			CloseHandle(handle);
+		}
+		else
+		{
+			free(fullName);
+			return false;
+		}
+
+		free(fullName);
+		return true;
+	}
+	else
+	{
+		return false;
+	}
+}
+
+static size_t fileArrayFind(FileArray* fileArray, const wchar_t* name)
+{
+	if (name)
+	{
+		for (size_t i = 0; i < fileArray->count; ++i)
+		{
+			if (wcscmp(name, fileArray->files[i].name) == 0)
+				return i;
+		}
+	}
+
+	return -1;
+}
+
+
+bool checkDirUpdates(WatchDirInfo* info, FileArray* fileArray, const wchar_t* dir, int sortMethod)
+{
+	bool ret = false;
+	bool needsResort = false;
+
+	size_t replaceFileIndex = -1;
+
+	FILE_NOTIFY_INFORMATION* fni = NULL;
+	while (fni = watchDirIterate(info))
+	{
+		switch (fni->Action)
+		{
+		case FILE_ACTION_ADDED:
+		{
+			if (fileArray->count + 1 > fileArray->cap)
+			{
+				// Doubling would probably be a waste for the occasional added file
+				File* temp = realloc(fileArray->files, sizeof(File) * (fileArray->cap + 5));
+				if (temp)
+				{
+					fileArray->files = temp;
+					fileArray->cap += 5;
+				}
+				else
+					break;
+			}
+
+			File file = { 0 };
+			file.name = malloc(fni->FileNameLength + sizeof(wchar_t));
+			if (file.name)
+			{
+				memcpy(file.name, fni->FileName, fni->FileNameLength);
+				file.name[fni->FileNameLength / sizeof(wchar_t)] = 0;
+
+				if (getFileInfo(&file, dir))
+				{
+					fileArray->files[fileArray->count] = file;
+					++fileArray->count;
+
+					needsResort = true;
+					ret = true;
+				}
+				else
+				{
+					free(file.name);
+				}
+			}
+			break;
+		}
+
+		case FILE_ACTION_REMOVED:
+		{
+			wchar_t* name = malloc(fni->FileNameLength + sizeof(wchar_t));
+			if (name)
+			{
+				memcpy(name, fni->FileName, fni->FileNameLength);
+				name[fni->FileNameLength / sizeof(wchar_t)] = 0;
+
+				size_t pos = fileArrayFind(fileArray, name);
+				if (pos != -1)
+				{
+					ret = true;
+					if (fileArray->files[pos].name)
+						free(fileArray->files[pos].name);
+
+					for (size_t i = pos; i < fileArray->count - 1; ++i)
+						fileArray->files[i] = fileArray->files[i + 1];
+					--fileArray->count;
+				}
+
+				free(name);
+			}
+			break;
+		}
+
+		case FILE_ACTION_MODIFIED:
+		{
+			wchar_t* name = malloc(fni->FileNameLength + sizeof(wchar_t));
+			if (name)
+			{
+				memcpy(name, fni->FileName, fni->FileNameLength);
+				name[fni->FileNameLength / sizeof(wchar_t)] = 0;
+
+				size_t pos = fileArrayFind(fileArray, name);
+				if (pos != -1)
+				{
+					ret = true;
+					getFileInfo(fileArray->files + pos, dir);
+					if (sortMethod == SORT_SIZE || sortMethod == SORT_SIZE_INV || 
+						sortMethod == SORT_CREATE || sortMethod == SORT_CREATE_INV || 
+						sortMethod == SORT_WRITE || sortMethod == SORT_WRITE_INV)
+						needsResort = true;
+				}
+
+				free(name);
+			}
+			break;
+		}
+
+		case FILE_ACTION_RENAMED_OLD_NAME:
+		{
+			// this always happens in the same buffer right before new
+			wchar_t* name = malloc(fni->FileNameLength + sizeof(wchar_t));
+			if (name)
+			{
+				memcpy(name, fni->FileName, fni->FileNameLength);
+				name[fni->FileNameLength / sizeof(wchar_t)] = 0;
+
+				replaceFileIndex = fileArrayFind(fileArray, name);
+
+				free(name);
+			}
+			break;
+		}
+
+		case FILE_ACTION_RENAMED_NEW_NAME:
+		{
+			ret = true;
+			if (replaceFileIndex != -1)
+			{
+				File* file = &fileArray->files[replaceFileIndex];
+				if (file->name)
+				{
+					free(file->name);
+					file->name = NULL;
+				}
+				file->name = malloc(fni->FileNameLength + sizeof(wchar_t));
+				if (file->name)
+				{
+					memcpy(file->name, fni->FileName, fni->FileNameLength);
+					file->name[fni->FileNameLength / sizeof(wchar_t)] = 0;
+					needsResort = true;
+				}
+				replaceFileIndex = -1;
+			}
+			break;
+		}
+		}
+	}
+
+	if (needsResort)
+		sortFileArray(fileArray, sortMethod);
+
+	return ret;
 }

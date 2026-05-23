@@ -115,7 +115,7 @@ static void enableVT()
 	SetConsoleMode(hConsole, mode | ENABLE_VIRTUAL_TERMINAL_INPUT);
 	
 	newScreenBuf();
-	setWindowTitle("FiBr File Browser 0.1.9");
+	setWindowTitle("FiBr File Browser 0.1.10");
 }
 
 static void resetTerminal()
@@ -742,11 +742,6 @@ static void changedDir(const wchar_t* currentDir, FileArray* fileArray,
 
 int main()
 {
-	// read last size from file
-	// be like explorer or notepad
-
-	// start in dir specified by parameter
-
 	enableVT();
 
 	HWND consoleWnd = GetConsoleWindow();
@@ -774,6 +769,8 @@ int main()
 
 	int sortMethod = SORT_NAME;
 
+	WatchDirInfo watchDirInfo = { 0 };
+
 	bool running = true;
 	while (running)
 	{
@@ -788,7 +785,12 @@ int main()
 			dirChanged = false;
 			resort = false;
 			reprint = false;
+
+			watchDirStop(&watchDirInfo);
+
 			changedDir(currentDir, &fileArray, &driveArray, &isFileArray, loadSubdirs, &sortMethod, &highlight, &dataCount, &retDir);
+
+			watchDirStart(currentDir, &watchDirInfo);
 		}
 		if (resort)
 		{
@@ -925,6 +927,10 @@ int main()
 
 		}
 
+		if (isFileArray)
+			if (checkDirUpdates(&watchDirInfo, &fileArray, currentDir, sortMethod))
+				reprint = true;
+
 		Sleep(50);
 	}
 
@@ -934,6 +940,8 @@ int main()
 		free(dirStack.data[i]);
 	free(dirStack.data);
 	
+	watchDirStop(&watchDirInfo);
+
 	if (currentDir)
 		free(currentDir);
 

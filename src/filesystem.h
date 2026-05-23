@@ -30,6 +30,7 @@ typedef struct FileArray
 {
 	File* files;
 	size_t count;
+	size_t cap;
 } FileArray;
 
 
@@ -77,6 +78,7 @@ typedef struct DriveArray
 {
 	Drive* drives;
 	size_t count;
+	size_t cap;
 } DriveArray;
 
 DriveArray getDrives(void);
@@ -89,3 +91,22 @@ void sortDriveArray(DriveArray* driveArray, int option);
 
 
 wchar_t* getCurrentDir(void);
+
+
+#include <Windows.h>
+
+typedef struct
+{
+	HANDLE hDir;
+	OVERLAPPED overlapped;
+	void* buf;
+	DWORD bufSize;
+} WatchDirInfo;
+
+bool watchDirStart(const wchar_t* path, WatchDirInfo* info);
+
+FILE_NOTIFY_INFORMATION* watchDirIterate(WatchDirInfo* info);
+
+void watchDirStop(WatchDirInfo* info);
+
+bool checkDirUpdates(WatchDirInfo* info, FileArray* fileArray, const wchar_t* dir, int sortMethod);
