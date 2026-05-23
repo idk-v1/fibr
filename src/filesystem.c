@@ -826,7 +826,7 @@ bool watchDirStart(const wchar_t* path, WatchDirInfo* info)
 	if (path)
 	{
 		info->hDir = CreateFileW(path,
-			FILE_LIST_DIRECTORY, FILE_SHARE_DELETE | FILE_SHARE_READ | FILE_SHARE_WRITE,
+			FILE_LIST_DIRECTORY, FILE_SHARE_READ | FILE_SHARE_WRITE,
 			NULL, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OVERLAPPED, NULL);
 
 		if (info->hDir != INVALID_HANDLE_VALUE)
@@ -936,7 +936,7 @@ static bool getFileInfo(File* file, const wchar_t* dir)
 		file->isFile = !isFileDir(fullName);
 
 		HANDLE handle = CreateFileW(fullName, GENERIC_READ,
-			FILE_SHARE_DELETE | FILE_SHARE_READ | FILE_SHARE_WRITE,
+			FILE_SHARE_READ,
 			NULL, OPEN_EXISTING, (file->isFile ? FILE_ATTRIBUTE_NORMAL : FILE_FLAG_BACKUP_SEMANTICS), NULL);
 		if (handle != INVALID_HANDLE_VALUE)
 		{
